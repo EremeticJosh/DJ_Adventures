@@ -67,4 +67,20 @@
       card.innerHTML = '<b>'+s.name+'</b> (aka '+s.alias+') – '+earned+'/'+BADGES.length+' badges';
       const badgeWrap = document.createElement("div");
       BADGES.forEach((b,i)=>{
-        const lbl =
+        const lbl = document.createElement("label");
+        lbl.className = "badge-pill";
+        const cb = document.createElement("input");
+        cb.type="checkbox"; cb.checked = s.badges[b.id];
+        cb.onchange = ()=>{ s.badges[b.id] = cb.checked; save(state); render(); };
+        lbl.appendChild(cb);
+        lbl.append(" "+b.emoji+" "+b.name);
+        badgeWrap.appendChild(lbl);
+      });
+      card.appendChild(badgeWrap);
+      root.appendChild(card);
+    });
+  }
+  render();
+})();</script>
+</body>
+</html>
