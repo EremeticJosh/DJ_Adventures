@@ -1,419 +1,70 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DJ Journey – Virtual Badge Tracker</title>
-  <meta name="description" content="Pokémon-style DJ/Music badge tracker for an 8-week after-school program." />
-  <style>
-    :root {
-      --indigo: #4f46e5;
-      --bg: #f8fafc;
-      --card: #ffffff;
-      --text: #111827;
-      --muted: #6b7280;
-      --border: #e5e7eb;
-      --accent: #3730a3;
-    }
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); }
-    header { position: sticky; top: 0; background: rgba(255,255,255,0.8); backdrop-filter: blur(6px); border-bottom: 1px solid #e0e7ff; }
-    .container { max-width: 1140px; margin: 0 auto; padding: 16px; }
-    .flex { display: flex; align-items: center; }
-    .between { justify-content: space-between; }
-    .title { font-weight: 800; font-size: 18px; }
-    .subtitle { font-size: 12px; color: var(--muted); }
-    .btn { border: 1px solid #e0e7ff; background: white; color: var(--accent); padding: 8px 12px; border-radius: 12px; font-weight: 600; cursor: pointer; }
-    .btn.primary { background: var(--indigo); color: white; border-color: var(--indigo); }
-    .btn.danger { color: #b91c1c; border-color: #fecaca; background: #fff; }
-    .btn:hover { filter: brightness(0.98); }
-    .grid { display: grid; gap: 12px; }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
-    .input, select { width: 100%; border: 1px solid var(--border); padding: 10px 12px; border-radius: 12px; outline: none; background: white; color: var(--text); }
-    .input:focus, select:focus { border-color: #c7d2fe; box-shadow: 0 0 0 3px #e0e7ff; }
-    .badge-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 6px 10px; border: 1px solid var(--border); background: #f9fafb; font-size: 12px; }
-    .student-card .pills { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
-    .progress { width: 54px; height: 54px; }
-    .muted { color: var(--muted); }
-    .controls { display: flex; gap: 8px; flex-wrap: wrap; }
-    .leaderboard-row { display: grid; grid-template-columns: 28px 1fr 130px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed #eef2ff; }
-    .medal { font-size: 18px; }
-    @media (max-width: 640px) {
-      .student-card .pills { grid-template-columns: repeat(2, minmax(0,1fr)); }
-      .leaderboard-row { grid-template-columns: 24px 1fr 100px; }
-    }
-    @media print {
-      header, .controls, .hide-on-print { display: none !important; }
-      .print-passport { display: block !important; }
-      body { background: white; }
-      .card { border: none; box-shadow: none; }
-    }
-    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #e5e7eb; transition: .2s; border-radius: 999px; }
-    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
-    input:checked + .slider { background-color: #4f46e5; }
-    input:checked + .slider:before { transform: translateX(20px); }
-    .checkbox { width: 18px; height: 18px; }
-    /* Fallback notice */ 
-    #fallback { display:none; color:#b91c1c; background:#fff1f2; border:1px solid #fecaca; padding:10px 12px; border-radius:12px; margin-top:12px;}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DJ Journey – Virtual Badge Tracker</title>
+<meta name="description" content="Pokémon-style DJ/Music badge tracker for an 8-week after-school program." />
+<style>
+  body { margin: 0; font-family: sans-serif; background: #f8fafc; color: #111827; }
+  header { background: #fff; border-bottom: 1px solid #e0e7ff; padding: 10px 16px; position: sticky; top: 0; }
+  .container { max-width: 1000px; margin: 0 auto; padding: 16px; }
+  .title { font-weight: 800; font-size: 18px; }
+  .subtitle { font-size: 12px; color: #6b7280; }
+  .btn { border: 1px solid #e5e7eb; background: white; color: #4f46e5; padding: 6px 10px; border-radius: 8px; cursor: pointer; margin: 2px; }
+  .btn.primary { background: #4f46e5; color: white; }
+  .card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+  .badge-pill { display: inline-block; padding: 4px 8px; border: 1px solid #ddd; border-radius: 12px; margin: 2px; font-size: 12px; }
+  .muted { color: #6b7280; }
+  .grid { display: grid; gap: 8px; }
+</style>
 </head>
 <body>
-  <header>
-    <div class="container flex between">
-      <div class="flex" style="gap: 10px;">
-        <div style="font-size: 24px;">🎧</div>
-        <div>
-          <div class="title">DJ Journey – Virtual Badge Tracker</div>
-          <div class="subtitle">Gamified 8-week after-school program</div>
-          <div id="fallback">The app didn't start. Please refresh. If it still doesn't load, check your internet connection and that scripts from <code>unpkg.com</code> aren't blocked. You can also try the Netlify drag‑and‑drop deploy.</div>
-        </div>
-      </div>
-      <div id="header-tools" class="flex" style="gap: 8px;"></div>
-    </div>
-  </header>
+<header>
+  <div class="title">🎧 DJ Journey – Virtual Badge Tracker</div>
+  <div class="subtitle">Gamified 8-week after-school program</div>
+</header>
+<main class="container">
+  <div id="app"></div>
+</main>
 
-  <main class="container" id="root"></main>
+<script>
+(function(){
+  const BADGES = [
+    { id: "rhythm", name: "Rhythm Badge", emoji: "🥁" },
+    { id: "mix", name: "Mix Badge", emoji: "🎚️" },
+    { id: "sound", name: "Sound Badge", emoji: "🎛️" },
+    { id: "scratch", name: "Scratch Badge", emoji: "💿" },
+    { id: "producer", name: "Producer Badge", emoji: "🎹" },
+    { id: "flow", name: "Flow Badge", emoji: "🎤" },
+    { id: "performance", name: "Performance Badge", emoji: "🎭" },
+    { id: "master", name: "Master Badge", emoji: "🏆" },
+  ];
+  const KEY = "dj-journey-vanilla-v1";
+  function load(){ try { return JSON.parse(localStorage.getItem(KEY)) || {students:[]} } catch(e){ return {students:[]} } }
+  function save(s){ localStorage.setItem(KEY, JSON.stringify(s)); }
+  let state = load();
+  const root = document.getElementById("app");
 
-  <!-- React & ReactDOM via CDN (defer) -->
-  <script defer src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script defer src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-
-  <script>
-    (function initWhenReady(){
-      // Wait for DOM and libraries
-      const start = Date.now();
-      const maxWait = 8000; // 8 seconds max
-      function ready(){
-        return window.React && window.ReactDOM && document.getElementById('root');
-      }
-      function boot(){
-        if (!ready()){
-          if (Date.now() - start > maxWait){
-            document.getElementById('fallback').style.display = 'block';
-            console.error('DJ Journey: React libraries not loaded in time. Check network or CSP.');
-            return;
-          }
-          return setTimeout(boot, 100);
-        }
-        // Mount app
-        AppMain();
-      }
-      boot();
-    })();
-  </script>
-
-  <script type="text/javascript">
-    function AppMain(){
-      const { useEffect, useMemo, useState } = React;
-      const BADGES = [
-        { id: "rhythm", name: "Rhythm Badge", emoji: "🥁" },
-        { id: "mix", name: "Mix Badge", emoji: "🎚️" },
-        { id: "sound", name: "Sound Badge", emoji: "🎛️" },
-        { id: "scratch", name: "Scratch Badge", emoji: "💿" },
-        { id: "producer", name: "Producer Badge", emoji: "🎹" },
-        { id: "flow", name: "Flow Badge", emoji: "🎤" },
-        { id: "performance", name: "Performance Badge", emoji: "🎭" },
-        { id: "master", name: "Master Badge", emoji: "🏆" },
-      ];
-
-      const KEY = "dj-journey-tracker-v3";
-      const loadState = () => { try { const raw = localStorage.getItem(KEY); return raw ? JSON.parse(raw) : null; } catch { return null; } };
-      const saveState = (state) => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} };
-
-      function ProgressRing({ percent, size = 54, stroke = 6 }) {
-        const r = (size - stroke) / 2;
-        const c = 2 * Math.PI * r;
-        const dash = ((percent / 100) * c) + " " + c;
-        return React.createElement(
-          "svg", { width: size, height: size, viewBox: `0 0 ${size} ${size}`, className: "progress" },
-          React.createElement("circle", { cx: size/2, cy: size/2, r, stroke: "#e5e7eb", strokeWidth: stroke, fill: "none" }),
-          React.createElement("circle", { cx: size/2, cy: size/2, r, stroke: "#4f46e5", strokeWidth: stroke, fill: "none", strokeLinecap: "round", strokeDasharray: dash, transform: `rotate(-90 ${size/2} ${size/2})` }),
-          React.createElement("text", { x: "50%", y: "50%", dominantBaseline: "middle", textAnchor: "middle", fontSize: "12", fill: "#111827" }, `${percent}%`)
-        );
-      }
-
-      function HeaderTools({ view, setView, count, currentWeek, setCurrentWeek, lockByWeek, setLockByWeek }) {
-        return React.createElement(React.Fragment, null,
-          React.createElement("label", { className: "subtitle", style: { display: "flex", alignItems: "center", gap: 6 } },
-            "Week:",
-            React.createElement("select", {
-              value: currentWeek,
-              onChange: (e) => setCurrentWeek(parseInt(e.target.value, 10)),
-              style: { width: 72 }
-            },
-              Array.from({ length: 8 }).map((_, i) => React.createElement("option", { key: i+1, value: i+1 }, i+1))
-            )
-          ),
-          React.createElement("label", { className: "subtitle", style: { display: "flex", alignItems: "center", gap: 8 } },
-            "Lock by week",
-            React.createElement("label", { className: "switch" },
-              React.createElement("input", { type: "checkbox", checked: lockByWeek, onChange: (e) => setLockByWeek(e.target.checked) }),
-              React.createElement("span", { className: "slider" })
-            )
-          ),
-          React.createElement("button", { className: "btn " + (view === "dashboard" ? "primary" : ""), onClick: () => setView("dashboard") }, "Dashboard"),
-          React.createElement("span", { className: "subtitle" }, count + " students")
-        );
-      }
-
-      function Dashboard({ students, setStudents, onOpenStudent, currentWeek }) {
-        const [name, setName] = useState("");
-        const [alias, setAlias] = useState("");
-        const [query, setQuery] = useState("");
-
-        const filtered = useMemo(() => {
-          if (!query.trim()) return students;
-          const q = query.toLowerCase();
-          return students.filter(s => s.name.toLowerCase().includes(q) || s.alias.toLowerCase().includes(q));
-        }, [students, query]);
-
-        const addStudent = () => {
-          const n = name.trim();
-          if (!n) return;
-          const id = Math.random().toString(36).slice(2);
-          const initBadges = Object.fromEntries(BADGES.map(b => [b.id, false]));
-          setStudents(prev => [...prev, { id, name: n, alias: alias.trim() || n, badges: initBadges }]);
-          setName(""); setAlias("");
-        };
-
-        const clearAll = () => {
-          if (!confirm("This will remove ALL students. Continue?")) return;
-          setStudents([]);
-        };
-
-        const exportJSON = () => {
-          const blob = new Blob([JSON.stringify({ students }, null, 2)], { type: "application/json" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "dj-journey-export-" + new Date().toISOString().slice(0,10) + ".json";
-          a.click();
-          URL.revokeObjectURL(url);
-        };
-
-        const importJSON = (file) => {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            try {
-              const data = JSON.parse(e.target.result);
-              if (!Array.isArray(data.students)) throw new Error("Invalid file");
-              setStudents(data.students);
-            } catch (err) { alert("Import failed. Make sure this is a valid export file."); }
-          };
-          reader.readAsText(file);
-        };
-
-        const pct = (s) => {
-          const total = BADGES.length;
-          const earned = BADGES.reduce((acc, b) => acc + (s.badges[b.id] ? 1 : 0), 0);
-          return Math.round((earned / total) * 100);
-        };
-
-        const leaderboard = [...students].map((s) => ({
-          id: s.id,
-          name: s.name,
-          alias: s.alias,
-          earned: BADGES.reduce((acc, b) => acc + (s.badges[b.id] ? 1 : 0), 0)
-        })).sort((a, b) => b.earned - a.earned || a.name.localeCompare(b.name)).slice(0, 10);
-
-        const medal = (i) => (i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "🎵");
-
-        return React.createElement("div", { className: "py-6 grid", style: { gap: 16 } },
-          React.createElement("div", { className: "card grid", style: { gridTemplateColumns: "2fr 1fr", gap: 16 } },
-            React.createElement("div", null,
-              React.createElement("div", { className: "subtitle", style: { marginBottom: 8, color: "#3730a3", fontWeight: 700 } }, "Add Student"),
-              React.createElement("div", { className: "grid", style: { gap: 8, gridTemplateColumns: "1fr 1fr auto" } },
-                React.createElement("input", { className: "input", placeholder: "Student name", value: name, onChange: (e) => setName(e.target.value) }),
-                React.createElement("input", { className: "input", placeholder: "DJ alias (optional)", value: alias, onChange: (e) => setAlias(e.target.value) }),
-                React.createElement("button", { className: "btn primary", onClick: addStudent }, "Add")
-              )
-            ),
-            React.createElement("div", null,
-              React.createElement("div", { className: "subtitle", style: { marginBottom: 8, color: "#3730a3", fontWeight: 700 } }, "Search / Tools"),
-              React.createElement("input", { className: "input", placeholder: "Search by name or alias", value: query, onChange: (e) => setQuery(e.target.value) }),
-              React.createElement("div", { className: "controls", style: { marginTop: 8 } },
-                React.createElement("button", { className: "btn", onClick: exportJSON }, "Export JSON"),
-                React.createElement("label", { className: "btn", style: { cursor: "pointer" } }, "Import JSON",
-                  React.createElement("input", { type: "file", accept: "application/json", hidden: true, onChange: (e) => e.target.files && e.target.files[0] && importJSON(e.target.files[0]) })
-                ),
-                React.createElement("button", { className: "btn danger", style: { marginLeft: "auto" }, onClick: clearAll }, "Reset")
-              )
-            )
-          ),
-
-          React.createElement("div", { className: "grid", style: { gridTemplateColumns: "2fr 1fr", gap: 16 } },
-            React.createElement("div", { className: "card" },
-              React.createElement("div", { className: "subtitle", style: { marginBottom: 8, color: "#3730a3", fontWeight: 700 } }, "Badges"),
-              React.createElement("div", { className: "controls", style: { gap: 8, flexWrap: "wrap" } },
-                BADGES.map(b => React.createElement("span", { key: b.id, className: "badge-pill" }, React.createElement("span", null, b.emoji), b.name))
-              )
-            ),
-            React.createElement("div", { className: "card" },
-              React.createElement("div", { className: "subtitle", style: { marginBottom: 8, color: "#3730a3", fontWeight: 700 } }, "Leaderboard (Top 10)"),
-              leaderboard.length === 0 && React.createElement("div", { className: "muted" }, "No students yet."),
-              leaderboard.map((row, i) =>
-                React.createElement("div", { key: row.id, className: "leaderboard-row" },
-                  React.createElement("div", { className: "medal" }, medal(i)),
-                  React.createElement("div", null, React.createElement("div", { style: { fontWeight: 700 } }, row.name), React.createElement("div", { className: "muted", style: { fontSize: 12 } }, "aka ", row.alias)),
-                  React.createElement("div", { className: "muted", style: { textAlign: "right" } }, row.earned, " / ", BADGES.length, " badges")
-                )
-              )
-            )
-          ),
-
-          React.createElement("div", { className: "grid", style: { gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 } },
-            filtered.map(s => React.createElement("div", { key: s.id, className: "card student-card" },
-              React.createElement("div", { className: "flex between" },
-                React.createElement("div", null,
-                  React.createElement("div", { style: { fontWeight: 800 } }, s.name),
-                  React.createElement("div", { className: "muted", style: { fontSize: 12 } }, "aka ", s.alias)
-                ),
-                React.createElement(ProgressRing, { percent: (function pct() { const total = BADGES.length; const earned = BADGES.reduce((acc, b) => acc + (s.badges[b.id] ? 1 : 0), 0); return Math.round((earned / total) * 100); })() })
-              ),
-              React.createElement("div", { className: "pills", style: { marginTop: 12 } },
-                BADGES.map(b => React.createElement("span", {
-                  key: b.id, title: b.name,
-                  className: "badge-pill",
-                  style: s.badges[b.id] ? { background: "#eef2ff", color: "#3730a3", borderColor: "#c7d2fe" } : {}
-                }, b.emoji))
-              ),
-              React.createElement("div", { className: "controls", style: { marginTop: 12 } },
-                React.createElement("button", { className: "btn primary", onClick: () => onOpenStudent(s.id) }, "Open"),
-                React.createElement("button", {
-                  className: "btn",
-                  onClick: () => {
-                    const allTrue = Object.fromEntries(BADGES.map(b => [b.id, true]));
-                    setStudents(prev => prev.map(st => st.id === s.id ? { ...st, badges: allTrue } : st));
-                  }
-                }, "Complete All"),
-                React.createElement("button", {
-                  className: "btn danger",
-                  onClick: () => setStudents(prev => prev.filter(st => st.id !== s.id))
-                }, "Remove")
-              )
-            ))
-          )
-        );
-      }
-
-      function StudentView({ student, onBack, onUpdate, currentWeek, lockByWeek }) {
-        if (!student) return React.createElement("div", { className: "card", style: { marginTop: 16 } },
-          React.createElement("div", { className: "muted" }, "No student selected."),
-          React.createElement("button", { className: "btn", style: { marginTop: 8 }, onClick: onBack }, "Back")
-        );
-
-        const earnedCount = BADGES.filter(b => student.badges[b.id]).length;
-        const percent = Math.round((earnedCount / BADGES.length) * 100);
-
-        const toggle = (id) => onUpdate(s => ({ ...s, badges: { ...s.badges, [id]: !s.badges[id] } }));
-        const setAll = (val) => onUpdate(s => ({ ...s, badges: Object.fromEntries(BADGES.map(b => [b.id, val])) }));
-        const printPassport = () => window.print();
-
-        return React.createElement("div", { className: "py-6 grid", style: { gap: 16 } },
-          React.createElement("div", { className: "card" },
-            React.createElement("div", { className: "flex between" },
-              React.createElement("div", null,
-                React.createElement("div", { style: { fontWeight: 800, fontSize: 18 } }, student.name),
-                React.createElement("div", { className: "muted", style: { fontSize: 12 } }, "DJ Alias: ", student.alias)
-              ),
-              React.createElement("div", { className: "flex", style: { gap: 8 } },
-                React.createElement(ProgressRing, { percent, size: 60, stroke: 8 }),
-                React.createElement("div", { className: "muted", style: { fontSize: 12 } }, earnedCount, "/", BADGES.length, " badges")
-              )
-            ),
-            React.createElement("div", { className: "grid", style: { gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 } },
-              BADGES.map((b, i) => {
-                const week = i + 1;
-                const locked = lockByWeek && week > currentWeek;
-                return React.createElement("label", {
-                  key: b.id, className: "card",
-                  style: Object.assign({ padding: 10, display: "flex", alignItems: "center", gap: 10 },
-                    student.badges[b.id] ? { borderColor: "#c7d2fe", background: "#eef2ff" } : {},
-                    locked ? { opacity: 0.6 } : {}
-                  )
-                ),
-                  React.createElement("input", { className: "checkbox", type: "checkbox", checked: !!student.badges[b.id], disabled: locked, onChange: () => toggle(b.id) }),
-                  React.createElement("div", { style: { fontSize: 20 } }, b.emoji),
-                  React.createElement("div", null,
-                    React.createElement("div", { style: { fontWeight: 700 } }, b.name),
-                    React.createElement("div", { className: "muted", style: { fontSize: 10 } }, "Week ", week, locked ? " • Locked" : "")
-                  )
-                );
-              })
-            ),
-            React.createElement("div", { className: "controls", style: { marginTop: 12 } },
-              React.createElement("button", { className: "btn", onClick: () => setAll(true) }, "Earn All"),
-              React.createElement("button", { className: "btn", onClick: () => setAll(false) }, "Clear All"),
-              React.createElement("button", { className: "btn primary", onClick: printPassport, style: { marginLeft: "auto" } }, "Print Passport"),
-              React.createElement("button", { className: "btn", onClick: onBack }, "Back to Dashboard")
-            )
-          ),
-
-          React.createElement("div", { className: "card print-passport", style: { display: "none" } },
-            React.createElement("div", { className: "flex between", style: { marginBottom: 8 } },
-              React.createElement("div", null,
-                React.createElement("div", { style: { fontWeight: 800, fontSize: 20 } }, "🎧 DJ Journey Passport"),
-                React.createElement("div", { className: "muted", style: { fontSize: 12 } }, "Student: ", student.name, " • Alias: ", student.alias)
-              ),
-              React.createElement("div", { className: "muted", style: { fontSize: 12 } }, "Badges: ", earnedCount, "/", BADGES.length)
-            ),
-            React.createElement("div", { className: "grid", style: { gridTemplateColumns: "1fr 1fr", gap: 8 } },
-              BADGES.map((b, i) => React.createElement("div", { key: b.id, className: "card", style: { padding: 10, display: "flex", alignItems: "center", gap: 8, borderStyle: "dashed" } },
-                React.createElement("div", { style: { fontSize: 20 } }, b.emoji),
-                React.createElement("div", { style: { flex: 1 } },
-                  React.createElement("div", { style: { fontWeight: 700 } }, b.name),
-                  React.createElement("div", { className: "muted", style: { fontSize: 10 } }, "Week ", i + 1)
-                ),
-                React.createElement("div", { style: { width: 18, height: 18, border: "1px solid #cbd5e1", borderRadius: 4, background: student.badges[b.id] ? "#4f46e5" : "transparent" })
-                )
-              ))
-            )
-          )
-        );
-      }
-
-      function App() {
-        const [students, setStudents] = useState([]);
-        const [view, setView] = useState("dashboard");
-        const [activeStudentId, setActiveStudentId] = useState(null);
-        const [currentWeek, setCurrentWeek] = useState(1);
-        const [lockByWeek, setLockByWeek] = useState(true);
-
-        useEffect(() => {
-          const st = loadState();
-          if (st?.students) setStudents(st.students);
-          if (st?.view) setView(st.view);
-          if (st?.activeStudentId) setActiveStudentId(st.activeStudentId);
-          if (st?.currentWeek) setCurrentWeek(st.currentWeek);
-          if (typeof st?.lockByWeek === "boolean") setLockByWeek(st.lockByWeek);
-        }, []);
-
-        useEffect(() => { saveState({ students, view, activeStudentId, currentWeek, lockByWeek }); }, [students, view, activeStudentId, currentWeek, lockByWeek]);
-
-        const activeStudent = useMemo(() => students.find(s => s.id === activeStudentId) || null, [students, activeStudentId]);
-
-        useEffect(() => {
-          const headerNode = document.getElementById("header-tools");
-          const root = ReactDOM.createRoot(headerNode);
-          root.render(React.createElement(HeaderTools, { view, setView, count: students.length, currentWeek, setCurrentWeek, lockByWeek, setLockByWeek }));
-          return () => root.unmount();
-        }, [view, students.length, currentWeek, lockByWeek]);
-
-        const onOpenStudent = (id) => { setActiveStudentId(id); setView("student"); };
-
-        return React.createElement(React.Fragment, null,
-          view === "dashboard"
-            ? React.createElement(Dashboard, { students, setStudents, onOpenStudent, currentWeek })
-            : React.createElement(StudentView, { student: activeStudent, onBack: () => setView("dashboard"), onUpdate: (updater) => setStudents(prev => prev.map(s => s.id === activeStudentId ? updater(s) : s)), currentWeek, lockByWeek })
-        );
-      }
-
-      const appRoot = document.getElementById("root");
-      const root = ReactDOM.createRoot(appRoot);
-      root.render(React.createElement(App));
-    }
-  </script>
-</body>
-</html>
+  function render(){
+    root.innerHTML = "";
+    const add = document.createElement("div");
+    add.className = "card";
+    add.innerHTML = '<b>Add Student</b><br><input id="name" placeholder="Name"/> <input id="alias" placeholder="DJ Alias"/><button class="btn primary" id="addBtn">Add</button>';
+    root.appendChild(add);
+    document.getElementById("addBtn").onclick = ()=>{
+      const name = document.getElementById("name").value.trim();
+      const alias = document.getElementById("alias").value.trim() || name;
+      if(!name) return;
+      const badges = {}; BADGES.forEach(b=> badges[b.id] = false);
+      state.students.push({id: Math.random().toString(36).slice(2), name, alias, badges});
+      save(state); render();
+    };
+    state.students.forEach(s=>{
+      const card = document.createElement("div");
+      card.className = "card";
+      const earned = BADGES.filter(b=> s.badges[b.id]).length;
+      card.innerHTML = '<b>'+s.name+'</b> (aka '+s.alias+') – '+earned+'/'+BADGES.length+' badges';
+      const badgeWrap = document.createElement("div");
+      BADGES.forEach((b,i)=>{
+        const lbl =
