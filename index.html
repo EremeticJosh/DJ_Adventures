@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>DJ Journey – Virtual Badge Tracker</title>
-<meta name="description" content="Pokémon-style DJ/Music badge tracker for an 8-week after-school program." />
+<meta name="description" content="DJ Journey badge tracker with attendance + XP gamification." />
 <style>
   :root {
     --indigo: #4f46e5;
@@ -14,10 +14,12 @@
     --muted: #6b7280;
     --border: #e5e7eb;
     --accent: #3730a3;
+    --gold: #f59e0b;
+    --green: #10b981;
   }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); }
-  header { position: sticky; top: 0; background: rgba(255,255,255,0.9); backdrop-filter: blur(6px); border-bottom: 1px solid #e0e7ff; }
+  header { position: sticky; top: 0; background: rgba(255,255,255,0.92); backdrop-filter: blur(6px); border-bottom: 1px solid #e0e7ff; }
   .container { max-width: 1140px; margin: 0 auto; padding: 16px; }
   .flex { display: flex; align-items: center; }
   .between { justify-content: space-between; }
@@ -26,6 +28,7 @@
   .btn { border: 1px solid #e0e7ff; background: white; color: var(--accent); padding: 8px 12px; border-radius: 12px; font-weight: 600; cursor: pointer; }
   .btn.primary { background: var(--indigo); color: white; border-color: var(--indigo); }
   .btn.danger { color: #b91c1c; border-color: #fecaca; background: #fff; }
+  .btn.success { color: white; background: var(--green); border-color: var(--green); }
   .btn:hover { filter: brightness(0.98); }
   .grid { display: grid; gap: 12px; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
@@ -36,11 +39,18 @@
   .progress { width: 54px; height: 54px; }
   .muted { color: var(--muted); }
   .controls { display: flex; gap: 8px; flex-wrap: wrap; }
-  .leaderboard-row { display: grid; grid-template-columns: 28px 1fr 130px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed #eef2ff; }
+  .leaderboard-row { display: grid; grid-template-columns: 28px 1fr 160px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed #eef2ff; }
   .medal { font-size: 18px; }
+  .xpbar { height: 8px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
+  .xpbar > div { height: 100%; background: linear-gradient(90deg, #60a5fa, #4f46e5); }
+  .chip { display:inline-flex; align-items:center; gap:6px; border:1px solid #fde68a; background:#fffbeb; color:#92400e; padding:4px 8px; border-radius:999px; font-size:12px; }
+  .attendance-grid { display:grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+  .att-cell { border:1px dashed #cbd5e1; border-radius:10px; padding:8px; text-align:center; }
+  .att-on { background:#ecfeff; border-color:#a5f3fc; }
+  .level { font-weight:800; color: var(--gold); }
   @media (max-width: 640px) {
     .student-card .pills { grid-template-columns: repeat(2, minmax(0,1fr)); }
-    .leaderboard-row { grid-template-columns: 24px 1fr 100px; }
+    .leaderboard-row { grid-template-columns: 24px 1fr 120px; }
   }
   @media print {
     header, .controls, .hide-on-print { display: none !important; }
@@ -77,7 +87,7 @@
 (function(){
   'use strict';
 
-  // ---------- Data & Storage ----------
+  // ---------- Config ----------
   const BADGES = [
     { id: "rhythm", name: "Rhythm Badge", emoji: "🥁" },
     { id: "mix", name: "Mix Badge", emoji: "🎚️" },
@@ -88,8 +98,12 @@
     { id: "performance", name: "Performance Badge", emoji: "🎭" },
     { id: "master", name: "Master Badge", emoji: "🏆" },
   ];
-  const KEY = "dj-journey-vanilla-v5";
+  const KEY = "dj-journey-xp-v1";
+  const XP_PER_BADGE = 50;
+  const XP_PER_ATTEND = 10;
+  const LEVEL_SIZE = 100; // XP per level
 
+  // ---------- Storage ----------
   function loadState(){
     try {
       const raw = localStorage.getItem(KEY);
@@ -117,10 +131,18 @@
   }
 
   function findStudent(id){ return state.students.find(s => s.id === id) || null; }
-  function pct(s){
+  function pctBadges(s){
     const total = BADGES.length;
     const earned = BADGES.reduce((acc, b) => acc + (s.badges[b.id] ? 1 : 0), 0);
     return Math.round((earned / total) * 100);
+  }
+
+  function ensureStudentShape(s){
+    if (!s.badges) s.badges = Object.fromEntries(BADGES.map(b => [b.id, false]));
+    if (!Array.isArray(s.attendance)) s.attendance = Array(8).fill(false);
+    if (typeof s.xp !== 'number') s.xp = 0;
+    if (typeof s.gold !== 'number') s.gold = 0;
+    return s;
   }
 
   // ---------- Utilities ----------
@@ -149,6 +171,17 @@
   }
   function uid(){ return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
 
+  function levelOf(xp){ return Math.floor(xp / LEVEL_SIZE) + 1; }
+  function xpInLevel(xp){ return xp % LEVEL_SIZE; }
+  function xpPercent(xp){ return Math.round((xpInLevel(xp) / LEVEL_SIZE) * 100); }
+  function streakOf(att){ // count trailing trues
+    let s = 0;
+    for (let i = att.length - 1; i >= 0; i--) {
+      if (att[i]) s++; else break;
+    }
+    return s;
+  }
+
   // ---------- Header Tools ----------
   function HeaderTools(){
     const wrap = h("div", { class: "flex", style: { gap: "10px", alignItems: "center" } });
@@ -164,14 +197,15 @@
     );
 
     // Lock-by-week toggle
-    const toggle = h("label", { class: "subtitle", style: { display:"flex", alignItems:"center", gap:"8px" } },
-      "Lock by week",
-      h("label", { class: "switch" },
-        h("input", { type:"checkbox", ...(state.lockByWeek?{checked:true}:{}) , onChange: (e)=> setState({ lockByWeek: e.target.checked }) }),
-        h("span", { class: "slider" })
+    wrap.append(
+      h("label", { class: "subtitle", style: { display:"flex", alignItems:"center", gap:"8px" } },
+        "Lock by week",
+        h("label", { class: "switch" },
+          h("input", { type:"checkbox", ...(state.lockByWeek?{checked:true}:{}) , onChange: (e)=> setState({ lockByWeek: e.target.checked }) }),
+          h("span", { class: "slider" })
+        )
       )
     );
-    wrap.append(toggle);
 
     // Dashboard button
     wrap.append(
@@ -202,8 +236,7 @@
               const name = document.getElementById("newName").value.trim();
               const alias = document.getElementById("newAlias").value.trim();
               if (!name) return;
-              const initBadges = Object.fromEntries(BADGES.map(b => [b.id, false]));
-              const s = { id: uid(), name, alias: alias || name, badges: initBadges };
+              const s = ensureStudentShape({ id: uid(), name, alias: alias || name, badges: null, attendance: null, xp: 0, gold: 0 });
               setState({ students: [...state.students, s] });
               document.getElementById("newName").value = "";
               document.getElementById("newAlias").value = "";
@@ -233,7 +266,7 @@
                 try {
                   const data = JSON.parse(ev.target.result);
                   if (!Array.isArray(data.students)) throw new Error("Invalid file");
-                  setState({ students: data.students });
+                  setState({ students: data.students.map(ensureStudentShape) });
                 } catch(err){
                   alert("Import failed. Make sure this is a valid export file.");
                 }
@@ -253,12 +286,12 @@
     );
     container.append(tools);
 
-    // Badges + Leaderboard
+    // Badges + XP leaderboard
     const filtered = state.students.filter(s => {
       if (!state.query.trim()) return true;
       const q = state.query.toLowerCase();
       return s.name.toLowerCase().includes(q) || s.alias.toLowerCase().includes(q);
-    });
+    }).map(ensureStudentShape);
 
     const badgesCard = h("div", { class:"card" },
       h("div", { class:"subtitle", style:{ marginBottom:"8px", color:"#3730a3", fontWeight:"700" } }, "Badges"),
@@ -268,21 +301,26 @@
       h("div", { class:"subtitle", style:{ marginTop:"8px" } }, `Current Week: ${state.currentWeek} / 8`)
     );
 
-    const leaderboard = [...state.students].map(s => ({
-      id: s.id, name: s.name, alias: s.alias,
-      earned: BADGES.reduce((acc,b)=> acc + (s.badges[b.id]?1:0), 0)
-    })).sort((a,b)=> b.earned - a.earned || a.name.localeCompare(b.name)).slice(0,10);
+    const leaderboardXP = [...state.students].map(ensureStudentShape).sort((a,b)=> b.xp - a.xp || a.name.localeCompare(b.name)).slice(0,10);
 
     const medals = ["🥇","🥈","🥉"];
     const leaderCard = h("div", { class:"card" },
-      h("div", { class:"subtitle", style:{ marginBottom:"8px", color:"#3730a3", fontWeight:"700" } }, "Leaderboard (Top 10)"),
-      leaderboard.length===0 ? h("div", { class:"muted" }, "No students yet.") :
+      h("div", { class:"subtitle", style:{ marginBottom:"8px", color:"#3730a3", fontWeight:"700" } }, "XP Leaderboard (Top 10)"),
+      leaderboardXP.length===0 ? h("div", { class:"muted" }, "No students yet.") :
       h("div", {},
-        ...leaderboard.map((row,i)=> h("div", { class:"leaderboard-row" },
-          h("div", { class:"medal" }, medals[i] || "🎵"),
-          h("div", {}, h("div", { style:{ fontWeight:"700" } }, row.name), h("div", { class:"muted", style:{ fontSize:"12px" } }, "aka ", row.alias)),
-          h("div", { class:"muted", style:{ textAlign:"right" } }, `${row.earned} / ${BADGES.length} badges`)
-        ))
+        ...leaderboardXP.map((row,i)=> {
+          const lvl = levelOf(row.xp);
+          const pct = xpPercent(row.xp);
+          return h("div", { class:"leaderboard-row" },
+            h("div", { class:"medal" }, medals[i] || "🎵"),
+            h("div", {}, 
+              h("div", { style:{ fontWeight:"700" } }, row.name, " ", h("span", { class:"level" }, "Lv ", lvl)),
+              h("div", { class:"muted", style:{ fontSize:"12px" } }, "aka ", row.alias),
+              h("div", { class:"xpbar", style:{ marginTop:"6px" } }, h("div", { style:{ width: pct+'%' } } ))
+            ),
+            h("div", { class:"muted", style:{ textAlign:"right" } }, row.xp, " XP")
+          );
+        })
       )
     );
 
@@ -291,13 +329,35 @@
     );
 
     // Students Grid
-    const grid = h("div", { class:"grid", style:{ gridTemplateColumns:"repeat(auto-fill, minmax(280px,1fr))", gap:"12px" } },
+    const grid = h("div", { class:"grid", style:{ gridTemplateColumns:"repeat(auto-fill, minmax(300px,1fr))", gap:"12px" } },
       ...filtered.map(s => {
-        const ring = progressSVG(pct(s));
+        const ring = progressRingPct(pctBadges(s));
+        const lvl = levelOf(s.xp);
+        const pct = xpPercent(s.xp);
+        const streak = streakOf(s.attendance);
+
+        // Attendance quick toggle for current week
+        const weekIdx = state.currentWeek - 1;
+        const attended = s.attendance[weekIdx];
+
         return h("div", { class:"card student-card" },
           h("div", { class:"flex between" },
-            h("div", {}, h("div", { style:{ fontWeight:"800" } }, s.name), h("div", { class:"muted", style:{ fontSize:"12px" } }, "aka ", s.alias)),
+            h("div", {}, 
+              h("div", { style:{ fontWeight:"800" } }, s.name, " ", h("span", { class:"level" }, "Lv ", lvl)),
+              h("div", { class:"muted", style:{ fontSize:"12px" } }, "aka ", s.alias)
+            ),
             ring
+          ),
+          h("div", { class:"xpbar", style:{ marginTop:"8px" } }, h("div", { style:{ width: pct+'%' } } )),
+          h("div", { class:"subtitle", style:{ marginTop:"6px" } }, s.xp, " XP • Streak: ", streak, " 🔥"),
+          h("div", { class:"controls", style:{ marginTop:"8px" } },
+            h("button", { class:"btn success", onClick: ()=> addXP(s.id, 10) }, "+10 XP"),
+            h("button", { class:"btn", onClick: ()=> addXP(s.id, 5) }, "+5 XP"),
+            h("button", { class:"btn", onClick: ()=> addXP(s.id, -5) }, "-5 XP"),
+            h("span", { class:"chip", title:"Attendance gives +10 XP (configurable)" },
+              attended ? "✅ Attended this week" : "⏺️ Mark attendance"
+            ),
+            h("button", { class:"btn", onClick: ()=> toggleAttendance(s.id, weekIdx) }, attended ? "Undo Attend" : "Mark Attend")
           ),
           h("div", { class:"pills", style:{ marginTop:"12px" } },
             ...BADGES.map(b => h("span", {
@@ -308,10 +368,6 @@
           ),
           h("div", { class:"controls", style:{ marginTop:"12px" } },
             h("button", { class:"btn primary", onClick: ()=> setState({ view:"student", activeStudentId: s.id }) }, "Open"),
-            h("button", { class:"btn", onClick: ()=> {
-                const allTrue = Object.fromEntries(BADGES.map(b=>[b.id,true]));
-                setState({ students: state.students.map(st => st.id===s.id ? { ...st, badges: allTrue } : st) });
-              } }, "Complete All"),
             h("button", { class:"btn danger", onClick: ()=> setState({ students: state.students.filter(st => st.id !== s.id) }) }, "Remove")
           )
         );
@@ -327,7 +383,7 @@
   }
 
   function StudentView(){
-    const s = findStudent(state.activeStudentId);
+    const s = ensureStudentShape(findStudent(state.activeStudentId));
     if (!s){
       return h("div", { class:"card", style:{ marginTop:"16px" } },
         h("div", { class:"muted" }, "No student selected."),
@@ -336,7 +392,10 @@
     }
     const earned = BADGES.filter(b => s.badges[b.id]).length;
     const percent = Math.round((earned / BADGES.length) * 100);
+    const lvl = levelOf(s.xp);
+    const pct = xpPercent(s.xp);
 
+    // Badge checkboxes (with XP on earn)
     const boxList = h("div", { class:"grid", style:{ gridTemplateColumns:"1fr 1fr", gap:"8px", marginTop:"12px" } },
       ...BADGES.map((b, i) => {
         const week = i+1;
@@ -350,8 +409,12 @@
             const input = h("input", { type:"checkbox", class:"checkbox", ...(s.badges[b.id]?{checked:true}:{}) });
             input.disabled = locked;
             input.addEventListener("change", ()=> {
-              const updated = state.students.map(st => st.id===s.id ? { ...st, badges:{ ...st.badges, [b.id]: !st.badges[b.id] } } : st);
+              const was = !!s.badges[b.id];
+              const now = !was;
+              const updated = state.students.map(st => st.id===s.id ? { ...st, badges:{ ...st.badges, [b.id]: now } } : st);
               setState({ students: updated });
+              if (now && !was) addXP(s.id, XP_PER_BADGE);
+              if (!now && was) addXP(s.id, -XP_PER_BADGE); // optional rollback
             });
             return input;
           })(),
@@ -362,26 +425,43 @@
       })
     );
 
+    // Attendance grid (all weeks)
+    const attGrid = h("div", { class:"attendance-grid" },
+      ...Array.from({length:8}, (_,i)=> {
+        const on = !!s.attendance[i];
+        return h("div", { class:"att-cell " + (on ? "att-on": "") },
+          h("div", { class:"muted", style:{ fontSize:"10px", marginBottom:"4px" } }, "Week ", (i+1)),
+          h("button", { class:"btn", onClick: ()=> toggleAttendance(s.id, i) }, on ? "Undo" : "Attend")
+        );
+      })
+    );
+
     const content = h("div", { class:"py-6 grid", style:{ gap:"16px" } },
       h("div", { class:"card" },
         h("div", { class:"flex between" },
-          h("div", {}, h("div", { style:{ fontWeight:"800", fontSize:"18px" } }, s.name), h("div", { class:"muted", style:{ fontSize:"12px" } }, "DJ Alias: ", s.alias)),
-          progressSVG(percent, 60)
+          h("div", {}, 
+            h("div", { style:{ fontWeight:"800", fontSize:"18px" } }, s.name, " ", h("span", { class:"level" }, "Lv ", lvl)),
+            h("div", { class:"muted", style:{ fontSize:"12px" } }, "DJ Alias: ", s.alias)
+          ),
+          progressRingPct(percent, 60)
         ),
+        h("div", { class:"xpbar", style:{ marginTop:"8px" } }, h("div", { style:{ width: pct+'%' } } )),
+        h("div", { class:"subtitle", style:{ marginTop:"6px" } }, s.xp, " XP • Streak: ", streakOf(s.attendance), " 🔥"),
         boxList,
         h("div", { class:"controls", style:{ marginTop:"12px" } },
-          h("button", { class:"btn", onClick: ()=> {
-              const updated = state.students.map(st => st.id===s.id ? { ...st, badges:Object.fromEntries(BADGES.map(b=>[b.id,true])) } : st);
-              setState({ students: updated });
-            } }, "Earn All"),
-          h("button", { class:"btn", onClick: ()=> {
-              const updated = state.students.map(st => st.id===s.id ? { ...st, badges:Object.fromEntries(BADGES.map(b=>[b.id,false])) } : st);
-              setState({ students: updated });
-            } }, "Clear All"),
+          h("button", { class:"btn success", onClick: ()=> addXP(s.id, 10) }, "+10 XP"),
+          h("button", { class:"btn", onClick: ()=> addXP(s.id, 5) }, "+5 XP"),
+          h("button", { class:"btn", onClick: ()=> addXP(s.id, -5) }, "-5 XP"),
           h("button", { class:"btn primary", style:{ marginLeft:"auto" }, onClick: ()=> window.print() }, "Print Passport"),
           h("button", { class:"btn", onClick: ()=> setState({ view:"dashboard" }) }, "Back to Dashboard")
         )
       ),
+
+      h("div", { class:"card" },
+        h("div", { class:"subtitle", style:{ marginBottom:"8px", color:"#3730a3", fontWeight:"700" } }, "Attendance (Tap to toggle)"),
+        attGrid
+      ),
+
       // Print-only passport
       h("div", { class:"card print-passport", style:{ display:"none" } },
         h("div", { class:"flex between", style:{ marginBottom:"8px" } },
@@ -401,8 +481,33 @@
     return content;
   }
 
+  // ---------- Actions ----------
+  function addXP(studentId, delta){
+    const updated = state.students.map(s => {
+      if (s.id !== studentId) return s;
+      const xp = Math.max(0, (s.xp || 0) + delta);
+      return { ...ensureStudentShape(s), xp };
+    });
+    setState({ students: updated });
+  }
+
+  function toggleAttendance(studentId, weekIdx){
+    const updated = state.students.map(s => {
+      if (s.id !== studentId) return s;
+      const st = ensureStudentShape({ ...s });
+      const was = !!st.attendance[weekIdx];
+      const now = !was;
+      st.attendance[weekIdx] = now;
+      // XP reward/rollback for attendance
+      const xpDelta = now ? XP_PER_ATTEND : -XP_PER_ATTEND;
+      st.xp = Math.max(0, (st.xp || 0) + xpDelta);
+      return st;
+    });
+    setState({ students: updated });
+  }
+
   // ---------- Small SVG progress helper ----------
-  function progressSVG(percent, size=54){
+  function progressRingPct(percent, size=54){
     const stroke = 6;
     const r = (size - stroke) / 2;
     const c = 2 * Math.PI * r;
@@ -443,6 +548,8 @@
   }
 
   function render(){
+    // Ensure shape for old saved data
+    state.students = state.students.map(ensureStudentShape);
     renderHeader();
     const root = document.getElementById("app");
     root.innerHTML = "";
