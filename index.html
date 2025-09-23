@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>DJ Journey – Virtual Badge Tracker</title>
-<meta name="description" content="DJ Journey tracker with per-day attendance (Mon–Thu) + XP gamification." />
+<meta name="description" content="DJ Journey tracker: per-day attendance (Mon–Thu), XP, levels, and a Reward Shop with gold." />
 <style>
   :root {
     --indigo: #4f46e5;
@@ -16,6 +16,7 @@
     --accent: #3730a3;
     --gold: #f59e0b;
     --green: #10b981;
+    --red: #ef4444;
   }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); }
@@ -29,6 +30,7 @@
   .btn.primary { background: var(--indigo); color: white; border-color: var(--indigo); }
   .btn.danger { color: #b91c1c; border-color: #fecaca; background: #fff; }
   .btn.success { color: white; background: var(--green); border-color: var(--green); }
+  .btn.gold { color: #92400e; background: #fffbeb; border-color: #fde68a; }
   .btn:hover { filter: brightness(0.98); }
   .grid { display: grid; gap: 12px; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
@@ -39,7 +41,7 @@
   .progress { width: 54px; height: 54px; }
   .muted { color: var(--muted); }
   .controls { display: flex; gap: 8px; flex-wrap: wrap; }
-  .leaderboard-row { display: grid; grid-template-columns: 28px 1fr 160px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed #eef2ff; }
+  .leaderboard-row { display: grid; grid-template-columns: 28px 1fr 190px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed #eef2ff; }
   .medal { font-size: 18px; }
   .xpbar { height: 8px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
   .xpbar > div { height: 100%; background: linear-gradient(90deg, #60a5fa, #4f46e5); }
@@ -50,9 +52,14 @@
   .att-cell { border:1px dashed #cbd5e1; border-radius:10px; padding:8px; text-align:center; }
   .att-on { background:#ecfeff; border-color:#a5f3fc; }
   .level { font-weight:800; color: var(--gold); }
+  .gold { color: var(--gold); font-weight: 800; }
+  .shop-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 10px; }
+  .shop-item { display:flex; flex-direction:column; gap:6px; }
+  .purchase { display:flex; align-items:center; justify-content:space-between; padding:8px; border:1px dashed var(--border); border-radius:12px; }
+  .pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:4px 8px; font-size:12px; border:1px solid #e5e7eb; background:#f9fafb; }
   @media (max-width: 640px) {
     .student-card .pills { grid-template-columns: repeat(2, minmax(0,1fr)); }
-    .leaderboard-row { grid-template-columns: 24px 1fr 120px; }
+    .leaderboard-row { grid-template-columns: 24px 1fr 150px; }
     .attendance-grid { grid-template-columns: 60px repeat(4, 1fr); }
   }
   @media print {
@@ -101,11 +108,21 @@
     { id: "performance", name: "Performance Badge", emoji: "🎭" },
     { id: "master", name: "Master Badge", emoji: "🏆" },
   ];
-  const KEY = "dj-journey-xp-v2-days";
+  const KEY = "dj-journey-xp-v3-shop";
   const XP_PER_BADGE = 50;
+  const GOLD_PER_BADGE = 5;
   const XP_PER_ATTEND_DAY = 10; // per day (Mon–Thu)
+  const GOLD_PER_ATTEND_DAY = 1;
   const LEVEL_SIZE = 100; // XP per level
   const DAYS = ["Mon","Tue","Wed","Thu"];
+
+  const SHOP_ITEMS = [
+    { id: "sticker", name: "Sticker", cost: 5, emoji: "🏷️" },
+    { id: "song", name: "Song Request Token", cost: 8, emoji: "🎵" },
+    { id: "skip", name: "Skip-the-Line Turn", cost: 10, emoji: "⏩" },
+    { id: "bonusxp", name: "Bonus XP (+10)", cost: 6, emoji: "⚡", grantsXP: 10 },
+    { id: "mystery", name: "Mystery Pack", cost: 12, emoji: "🎁" }
+  ];
 
   // ---------- Storage ----------
   function loadState(){
@@ -144,9 +161,7 @@
 
   function ensureStudentShape(s){
     if (!s.badges) s.badges = Object.fromEntries(BADGES.map(b => [b.id, false]));
-    // New: attendanceDays = 8 x 4
     if (!Array.isArray(s.attendanceDays)) {
-      // migrate old weekly attendance if present
       if (Array.isArray(s.attendance)) {
         s.attendanceDays = s.attendance.map(w => [!!w, false, false, false]);
         delete s.attendance;
@@ -156,6 +171,7 @@
     }
     if (typeof s.xp !== 'number') s.xp = 0;
     if (typeof s.gold !== 'number') s.gold = 0;
+    if (!Array.isArray(s.purchases)) s.purchases = []; // {id,itemId,name,cost,ts,fulfilled}
     return s;
   }
 
@@ -190,7 +206,6 @@
   function xpPercent(xp){ return Math.round((xpInLevel(xp) / LEVEL_SIZE) * 100); }
 
   function streakDays(attendanceDays){
-    // Count trailing attended days across the 8x4 sequence
     let s = 0;
     outer: for (let w = attendanceDays.length - 1; w >= 0; w--) {
       for (let d = attendanceDays[w].length - 1; d >= 0; d--) {
@@ -221,7 +236,7 @@
       h("label", { class: "subtitle", style: { display:"flex", alignItems:"center", gap:"6px" } },
         "Day:",
         h("select", { value: state.currentDay, onChange: (e)=> setState({ currentDay: parseInt(e.target.value,10) }) },
-          ...DAYS.map((d,idx)=> h("option", { value: idx, ...(state.currentDay===idx?{selected:true}:{}) }, d))
+          ...["Mon","Tue","Wed","Thu"].map((d,idx)=> h("option", { value: idx, ...(state.currentDay===idx?{selected:true}:{}) }, d))
         )
       )
     );
@@ -266,7 +281,7 @@
               const name = document.getElementById("newName").value.trim();
               const alias = document.getElementById("newAlias").value.trim();
               if (!name) return;
-              const s = ensureStudentShape({ id: uid(), name, alias: alias || name, badges: null, attendanceDays: null, xp: 0, gold: 0 });
+              const s = ensureStudentShape({ id: uid(), name, alias: alias || name, badges: null, attendanceDays: null, xp: 0, gold: 0, purchases: null });
               setState({ students: [...state.students, s] });
               document.getElementById("newName").value = "";
               document.getElementById("newAlias").value = "";
@@ -328,7 +343,7 @@
       h("div", { class:"controls", style:{ gap:"8px", flexWrap:"wrap" } },
         ...BADGES.map(b => h("span", { class:"badge-pill" }, b.emoji, " ", b.name))
       ),
-      h("div", { class:"subtitle", style:{ marginTop:"8px" } }, `Current Week: ${state.currentWeek} / 8 • Day: ${DAYS[state.currentDay]}`)
+      h("div", { class:"subtitle", style:{ marginTop:"8px" } }, `Current Week: ${state.currentWeek} / 8 • Day: ${["Mon","Tue","Wed","Thu"][state.currentDay]}`)
     );
 
     const leaderboardXP = [...state.students].map(ensureStudentShape).sort((a,b)=> b.xp - a.xp || a.name.localeCompare(b.name)).slice(0,10);
@@ -359,7 +374,7 @@
     );
 
     // Students Grid
-    const grid = h("div", { class:"grid", style:{ gridTemplateColumns:"repeat(auto-fill, minmax(320px,1fr))", gap:"12px" } },
+    const grid = h("div", { class:"grid", style:{ gridTemplateColumns:"repeat(auto-fill, minmax(340px,1fr))", gap:"12px" } },
       ...filtered.map(s => {
         const ring = progressRingPct(pctBadges(s));
         const lvl = levelOf(s.xp);
@@ -383,8 +398,11 @@
             h("button", { class:"btn success", onClick: ()=> addXP(s.id, 10) }, "+10 XP"),
             h("button", { class:"btn", onClick: ()=> addXP(s.id, 5) }, "+5 XP"),
             h("button", { class:"btn", onClick: ()=> addXP(s.id, -5) }, "-5 XP"),
-            h("span", { class:"chip", title:"Attendance gives +10 XP per day" },
-              attended ? `✅ Attended ${DAYS[d]}` : `⏺️ Mark ${DAYS[d]}`
+            h("span", { class:"pill" }, "🪙 ", s.gold, " gold"),
+            h("button", { class:"btn gold", onClick: ()=> addGold(s.id, 1) }, "+1 gold"),
+            h("button", { class:"btn gold", onClick: ()=> addGold(s.id, 5) }, "+5 gold"),
+            h("span", { class:"chip", title:"Attendance gives +10 XP and +1 gold per day" },
+              attended ? `✅ Attended ${["Mon","Tue","Wed","Thu"][d]}` : `⏺️ Mark ${["Mon","Tue","Wed","Thu"][d]}`
             ),
             h("button", { class:"btn", onClick: ()=> toggleAttendanceDay(s.id, w, d) }, attended ? "Undo Attend" : "Mark Attend")
           ),
@@ -424,7 +442,7 @@
     const lvl = levelOf(s.xp);
     const pct = xpPercent(s.xp);
 
-    // Badge checkboxes (with XP on earn)
+    // Badge checkboxes (with XP & gold on earn)
     const boxList = h("div", { class:"grid", style:{ gridTemplateColumns:"1fr 1fr", gap:"8px", marginTop:"12px" } },
       ...BADGES.map((b, i) => {
         const week = i+1;
@@ -442,8 +460,8 @@
               const now = !was;
               const updated = state.students.map(st => st.id===s.id ? { ...st, badges:{ ...st.badges, [b.id]: now } } : st);
               setState({ students: updated });
-              if (now && !was) addXP(s.id, XP_PER_BADGE);
-              if (!now && was) addXP(s.id, -XP_PER_BADGE); // rollback
+              if (now && !was) { addXP(s.id, XP_PER_BADGE); addGold(s.id, GOLD_PER_BADGE); }
+              if (!now && was) { addXP(s.id, -XP_PER_BADGE); addGold(s.id, -GOLD_PER_BADGE); }
             });
             return input;
           })(),
@@ -457,7 +475,7 @@
     // Attendance 8x4 grid
     const headRow = h("div", { class:"attendance-grid", style:{ marginTop:"8px" } },
       h("div", { class:"att-head" }, ""),
-      ...DAYS.map(d => h("div", { class:"att-head" }, d))
+      ...["Mon","Tue","Wed","Thu"].map(d => h("div", { class:"att-head" }, d))
     );
     const rows = s.attendanceDays.map((weekArr, wIdx) => {
       return h("div", { class:"attendance-grid" },
@@ -467,6 +485,44 @@
         ))
       );
     });
+
+    // Shop UI
+    const shop = h("div", { class:"card" },
+      h("div", { class:"flex between" },
+        h("div", { class:"subtitle", style:{ color:"#3730a3", fontWeight:"700" } }, "Reward Shop"),
+        h("div", { class:"pill" }, "🪙 ", s.gold, " gold")
+      ),
+      h("div", { class:"shop-grid", style:{ marginTop:"8px" } },
+        ...SHOP_ITEMS.map(item => {
+          const canBuy = s.gold >= item.cost;
+          return h("div", { class:"card shop-item" },
+            h("div", { class:"flex between" },
+              h("div", { style:{ fontWeight:"700" } }, item.emoji, " ", item.name),
+              h("div", { class:"gold" }, item.cost, "g")
+            ),
+            h("button", { class:"btn " + (canBuy ? "gold" : ""), disabled: canBuy ? undefined : true, onClick: ()=> buyItem(s.id, item.id) },
+              canBuy ? "Buy" : "Need " + (item.cost - s.gold) + "g"
+            )
+          );
+        })
+      ),
+      h("div", { class:"subtitle", style:{ marginTop:"10px", color:"#374151" } }, "Purchases"),
+      (s.purchases && s.purchases.length > 0) ?
+        h("div", { class:"grid" },
+          ...s.purchases.map(p => {
+            const item = SHOP_ITEMS.find(i=>i.id===p.itemId);
+            const label = item ? (item.emoji + " " + item.name) : p.name;
+            return h("div", { class:"purchase" },
+              h("div", {}, label, " • ", p.cost, "g", " ", h("span", { class:"muted", style:{ fontSize:"12px" } }, new Date(p.ts).toLocaleString())),
+              h("label", {}, 
+                h("input", { type:"checkbox", ...(p.fulfilled?{checked:true}:{}) , onChange: ()=> toggleFulfilled(s.id, p.id) }),
+                " Fulfilled"
+              )
+            );
+          })
+        ) :
+        h("div", { class:"muted" }, "No purchases yet.")
+    );
 
     const content = h("div", { class:"py-6 grid", style:{ gap:"16px" } },
       h("div", { class:"card" },
@@ -479,14 +535,12 @@
         ),
         h("div", { class:"xpbar", style:{ marginTop:"8px" } }, h("div", { style:{ width: pct+'%' } } )),
         h("div", { class:"subtitle", style:{ marginTop:"6px" } }, s.xp, " XP • Day Streak: ", streakDays(s.attendanceDays), " 🔥"),
-        boxList,
-        h("div", { class:"controls", style:{ marginTop:"12px" } },
-          h("button", { class:"btn success", onClick: ()=> addXP(s.id, 10) }, "+10 XP"),
-          h("button", { class:"btn", onClick: ()=> addXP(s.id, 5) }, "+5 XP"),
-          h("button", { class:"btn", onClick: ()=> addXP(s.id, -5) }, "-5 XP"),
-          h("button", { class:"btn primary", style:{ marginLeft:"auto" }, onClick: ()=> window.print() }, "Print Passport"),
-          h("button", { class:"btn", onClick: ()=> setState({ view:"dashboard" }) }, "Back to Dashboard")
-        )
+        h("div", { class:"controls", style:{ marginTop:"8px" } },
+          h("span", { class:"pill" }, "🪙 ", s.gold, " gold"),
+          h("button", { class:"btn gold", onClick: ()=> addGold(s.id, 1) }, "+1 gold"),
+          h("button", { class:"btn gold", onClick: ()=> addGold(s.id, 5) }, "+5 gold")
+        ),
+        boxList
       ),
 
       h("div", { class:"card" },
@@ -494,6 +548,8 @@
         headRow,
         ...rows
       ),
+
+      shop,
 
       // Print-only passport (unchanged)
       h("div", { class:"card print-passport", style:{ display:"none" } },
@@ -523,6 +579,14 @@
     });
     setState({ students: updated });
   }
+  function addGold(studentId, delta){
+    const updated = state.students.map(s => {
+      if (s.id !== studentId) return s;
+      const gold = Math.max(0, (s.gold || 0) + delta);
+      return { ...ensureStudentShape(s), gold };
+    });
+    setState({ students: updated });
+  }
 
   function toggleAttendanceDay(studentId, weekIdx, dayIdx){
     const updated = state.students.map(s => {
@@ -531,9 +595,38 @@
       const was = !!st.attendanceDays[weekIdx][dayIdx];
       const now = !was;
       st.attendanceDays[weekIdx][dayIdx] = now;
-      // XP reward/rollback per day
+      // Rewards per day
       const xpDelta = now ? XP_PER_ATTEND_DAY : -XP_PER_ATTEND_DAY;
+      const goldDelta = now ? GOLD_PER_ATTEND_DAY : -GOLD_PER_ATTEND_DAY;
       st.xp = Math.max(0, (st.xp || 0) + xpDelta);
+      st.gold = Math.max(0, (st.gold || 0) + goldDelta);
+      return st;
+    });
+    setState({ students: updated });
+  }
+
+  function buyItem(studentId, itemId){
+    const updated = state.students.map(s => {
+      if (s.id !== studentId) return s;
+      const st = ensureStudentShape({ ...s });
+      const item = SHOP_ITEMS.find(i=>i.id===itemId);
+      if (!item) return st;
+      if ((st.gold || 0) < item.cost) return st;
+      st.gold = (st.gold || 0) - item.cost;
+      // If item grants XP immediately
+      if (item.grantsXP) st.xp = Math.max(0, (st.xp || 0) + item.grantsXP);
+      const purchase = { id: uid(), itemId: item.id, name: item.name, cost: item.cost, ts: Date.now(), fulfilled: false };
+      st.purchases = Array.isArray(st.purchases) ? [purchase, ...st.purchases] : [purchase];
+      return st;
+    });
+    setState({ students: updated });
+  }
+
+  function toggleFulfilled(studentId, purchaseId){
+    const updated = state.students.map(s => {
+      if (s.id !== studentId) return s;
+      const st = ensureStudentShape({ ...s });
+      st.purchases = (st.purchases || []).map(p => p.id === purchaseId ? { ...p, fulfilled: !p.fulfilled } : p);
       return st;
     });
     setState({ students: updated });
@@ -581,7 +674,6 @@
   }
 
   function render(){
-    // Ensure shape for old saved data
     state.students = state.students.map(ensureStudentShape);
     renderHeader();
     const root = document.getElementById("app");
