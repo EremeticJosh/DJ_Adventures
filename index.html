@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DJ Journey Tracker v12 — Attendance Rewards</title>
+<title>DJ Journey Tracker v13 — Leaderboard</title>
 <style>
   :root{
     --bg:#f6f7fb;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#111827;
@@ -29,15 +29,22 @@
   .badge{border:1px solid var(--line);border-radius:999px;padding:4px 10px;display:inline-block;margin:2px 4px 0 0}
   .footer{font-size:12px;color:#9ca3af;text-align:center;padding:24px 0}
   .table{width:100%;border-collapse:collapse}
-  .table td{border-bottom:1px solid var(--line);padding:6px}
+  .table th,.table td{border-bottom:1px solid var(--line);padding:6px;text-align:left;font-size:14px}
   .tile{border:1px solid var(--line);border-radius:12px;padding:10px 14px;text-align:center}
+  .rank{font-weight:700}
+  .gold{background:#fff7d6}
+  .silver{background:#f1f5f9}
+  .bronze{background:#fef3c7}
+  .tabbar{display:flex;gap:8px;margin-bottom:8px}
+  .tab{padding:6px 10px;border:1px solid var(--line);border-radius:999px;cursor:pointer}
+  .tab.active{background:#111;color:#fff}
 </style>
 </head>
 <body>
   <div class="container">
     <div class="row" style="justify-content:space-between">
       <div>
-        <h1>DJ Journey Tracker v12</h1>
+        <h1>DJ Journey Tracker v13</h1>
         <div class="muted" style="font-size:13px">XP = skill progression • Crowd Control (CC) = shop currency • Attendance grants +10 XP/+10 CC • Data saved locally</div>
       </div>
       <div class="row">
@@ -55,6 +62,18 @@
       <div id="studentsList" class="grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))"></div>
     </div>
 
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h2 style="margin:0">Leaderboard</h2>
+        <div class="tabbar">
+          <div class="tab active" id="tab-xp">Top by XP</div>
+          <div class="tab" id="tab-cc">Top by CC</div>
+        </div>
+      </div>
+      <div id="leaderboard"></div>
+      <div class="muted" style="font-size:12px;margin-top:6px">Tip: Encourage effort & consistency. Consider small weekly prizes for top CC earners.</div>
+    </div>
+
     <div id="panel"></div>
 
     <div class="card">
@@ -69,12 +88,12 @@
       <textarea id="io" placeholder="Paste JSON here to import, or click Export first."></textarea>
     </div>
 
-    <div class="footer">DJ Journey Tracker v12 • Local only • Tip: Export before clearing browser storage.</div>
+    <div class="footer">DJ Journey Tracker v13 • Local only • Tip: Export before clearing browser storage.</div>
   </div>
 
 <script>
 (function(){
-  const STORAGE_KEY = 'dj_journey_tracker_v12_attendance_reward';
+  const STORAGE_KEY = 'dj_journey_tracker_v13_leaderboard';
   const $ = (sel, root=document) => root.querySelector(sel);
   const uid = () => Math.random().toString(36).slice(2,9);
   const today = () => new Date().toISOString().slice(0,10);
@@ -82,6 +101,7 @@
   const ATTENDANCE_REWARD_XP = 10;
   const ATTENDANCE_REWARD_CC = 10;
 
+  // ---------- Curriculum (same as v12) ----------
   const W = (w, unit, title, tasks, badge) => ({ w, unit, title, tasks: tasks.map((t,i)=>({ id: w+'-'+(i+1), ...t })), badge});
   const T = (title, xp, type='class') => ({ title, xp, type });
   const Challenge = (title, xp=30) => T('Challenge: '+title, xp, 'challenge');
@@ -168,23 +188,61 @@
     ...generateTemplateWeeks(35,36,'Unit 8 — Turntablist Tower','Scratching & Battles',true,'Scratch Badge'),
   ];
 
+  // ---------- State ----------
   let store = load() || { students: [] };
   let activeStudentId = (store.students[0] && store.students[0].id) || null;
+  let leaderboardMode = 'xp'; // 'xp' or 'cc'
 
   function load(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){ return null; } }
   function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); }catch(e){} }
 
+  // ---------- Leaderboard ----------
+  function renderLeaderboard(){
+    const box = document.getElementById('leaderboard');
+    if(!store.students.length){ box.innerHTML = '<div class="muted">Add students to populate the leaderboard.</div>'; return; }
+    // ensure CC exists in all
+    store.students.forEach(s => { if(typeof s.crowdControl!=='number') s.crowdControl = 0; });
+
+    const sorted = [...store.students].sort((a,b)=>{
+      return leaderboardMode==='xp' ? (b.xp||0)-(a.xp||0) : (b.crowdControl||0)-(a.crowdControl||0);
+    }).slice(0,10);
+
+    let headerLeft = leaderboardMode==='xp' ? 'XP' : 'Crowd Control';
+    box.innerHTML = '';
+    const table = document.createElement('table'); table.className='table';
+    const thead = document.createElement('thead');
+    thead.innerHTML = `<tr><th style="width:60px">Rank</th><th>Name</th><th style="width:140px;text-align:right">${headerLeft}</th><th style="width:120px;text-align:right">Badges</th></tr>`;
+    table.append(thead);
+    const tbody = document.createElement('tbody');
+
+    sorted.forEach((s, i) => {
+      const tr = document.createElement('tr');
+      const rank = i+1;
+      if(rank===1) tr.classList.add('gold');
+      if(rank===2) tr.classList.add('silver');
+      if(rank===3) tr.classList.add('bronze');
+      const score = leaderboardMode==='xp' ? (s.xp||0) : (s.crowdControl||0);
+      const badges = (s.badges||[]).length;
+      tr.innerHTML = `<td class="rank">#${rank}</td><td>${s.name||'—'}</td><td style="text-align:right">${score}</td><td style="text-align:right">${badges}</td>`;
+      tbody.append(tr);
+    });
+
+    table.append(tbody);
+    box.append(table);
+  }
+
+  // ---------- Rendering ----------
   function renderStudents(){
     const list = document.getElementById('studentsList'); list.innerHTML='';
     store.students.forEach(s => {
       if (typeof s.crowdControl !== 'number') s.crowdControl = 0;
       const card = document.createElement('div'); card.className='card';
-      const name = document.createElement('input'); name.value=s.name; name.oninput=()=>{ s.name=name.value; save(); renderPanel(); };
+      const name = document.createElement('input'); name.value=s.name; name.oninput=()=>{ s.name=name.value; save(); renderPanel(); renderLeaderboard(); };
       name.style.width='100%';
       const meta = document.createElement('div'); meta.className='muted'; meta.style.fontSize='12px'; meta.textContent = `XP: ${s.xp||0} • CC: ${s.crowdControl||0} • Badges: ${(s.badges||[]).length}`;
       const row = document.createElement('div'); row.className='row';
       const open = document.createElement('button'); open.className='btn'; open.textContent='Open'; open.onclick=()=>{ activeStudentId=s.id; renderPanel(); };
-      const del = document.createElement('button'); del.className='btn'; del.style.color='#dc2626'; del.textContent='Remove'; del.onclick=()=>{ store.students=store.students.filter(x=>x.id!==s.id); if(activeStudentId===s.id) activeStudentId=(store.students[0]&&store.students[0].id)||null; save(); renderStudents(); renderPanel(); };
+      const del = document.createElement('button'); del.className='btn'; del.style.color='#dc2626'; del.textContent='Remove'; del.onclick=()=>{ store.students=store.students.filter(x=>x.id!==s.id); if(activeStudentId===s.id) activeStudentId=(store.students[0]&&store.students[0].id)||null; save(); renderStudents(); renderPanel(); renderLeaderboard(); };
       row.append(open, del);
       card.append(name, meta, row); list.append(card);
     });
@@ -194,29 +252,43 @@
     const wrap = document.getElementById('panel'); wrap.innerHTML='';
     const s = store.students.find(x=>x.id===activeStudentId);
     if(!s){ wrap.innerHTML = '<div class="card muted" style="text-align:center">Add a student to get started.</div>'; return; }
+
     if (typeof s.crowdControl !== 'number') s.crowdControl = 0;
+
     const week = parseInt(document.getElementById('week').value)||1;
 
     const top = document.createElement('div'); top.className='grid grid-3';
 
+    // Left summary
     const left = document.createElement('div'); left.className='card';
     left.innerHTML = `
       <div class="muted" style="text-transform:uppercase;font-size:12px;letter-spacing:.05em">Student</div>
       <div style="font-size:22px;font-weight:700;margin-bottom:8px">${s.name}</div>
       <div class="row">
-        <div class="tile"><div class="muted" style="font-size:12px">XP</div><div style="font-size:18px;font-weight:600">${s.xp||0}</div></div>
-        <div class="tile"><div class="muted" style="font-size:12px">Level</div><div style="font-size:18px;font-weight:600">${1+Math.floor((s.xp||0)/100)}</div></div>
-        <div class="tile"><div class="muted" style="font-size:12px">Crowd Control</div><div style="font-size:18px;font-weight:600">${s.crowdControl||0} CC</div></div>
+        <div class="tile">
+          <div class="muted" style="font-size:12px">XP</div>
+          <div style="font-size:18px;font-weight:600">${s.xp||0}</div>
+        </div>
+        <div class="tile">
+          <div class="muted" style="font-size:12px">Level</div>
+          <div style="font-size:18px;font-weight:600">${1+Math.floor((s.xp||0)/100)}</div>
+        </div>
+        <div class="tile">
+          <div class="muted" style="font-size:12px">Crowd Control</div>
+          <div style="font-size:18px;font-weight:600">${s.crowdControl||0} CC</div>
+        </div>
       </div>
     `;
 
+    // XP buttons
     const xpRow = document.createElement('div'); xpRow.className='row';
     [10,20,30,50,100].forEach(n=>{
-      const b=document.createElement('button'); b.className='btn'; b.textContent='+'+n+' XP'; b.title='Manual XP grant'; b.onclick=()=>{ s.xp=(s.xp||0)+n; save(); renderStudents(); renderPanel(); };
+      const b=document.createElement('button'); b.className='btn'; b.textContent='+'+n+' XP'; b.title='Manual XP grant'; b.onclick=()=>{ s.xp=(s.xp||0)+n; save(); renderStudents(); renderPanel(); renderLeaderboard(); };
       xpRow.append(b);
     });
     left.append(xpRow);
 
+    // Badges
     const badgeBox = document.createElement('div'); badgeBox.style.marginTop='12px';
     badgeBox.innerHTML = '<div class="muted" style="font-size:14px;margin-bottom:4px">Badges</div>';
     const rack = document.createElement('div'); (s.badges||[]).forEach(b=>{ const tag=document.createElement('div'); tag.className='badge'; tag.textContent=b; rack.append(tag); });
@@ -224,11 +296,13 @@
     badgeBox.append(rack);
     left.append(badgeBox);
 
+    // Notes
     const notes = document.createElement('div'); notes.style.marginTop='12px';
     notes.innerHTML = '<label class="muted" style="font-size:14px">Notes</label>';
     const ta=document.createElement('textarea'); ta.value=s.notes||''; ta.oninput=()=>{ s.notes=ta.value; save(); }; notes.append(ta);
     left.append(notes);
 
+    // Attendance
     const att = document.createElement('div'); att.className='card'; att.style.marginTop='12px';
     const rec = (s.attendance&&s.attendance[week])||{}; const days=['Mon','Tue','Wed','Thu'];
     const attRow=document.createElement('div'); attRow.className='row';
@@ -246,13 +320,14 @@
           s.xp = Math.max(0, (s.xp||0) - ATTENDANCE_REWARD_XP);
           s.crowdControl = Math.max(0, (s.crowdControl||0) - ATTENDANCE_REWARD_CC);
         }
-        save(); renderStudents(); renderPanel();
+        save(); renderStudents(); renderPanel(); renderLeaderboard();
       };
       attRow.append(btn);
     });
     const mark=document.createElement('div'); mark.className='muted'; mark.style.fontSize='12px'; mark.style.marginTop='6px'; mark.textContent=`Marked: ${days.filter(d=>rec[d]).length}/4`;
     att.append(attRow, mark);
 
+    // Reward shop — uses CC
     const shop = document.createElement('div'); shop.className='card'; shop.style.marginTop='12px';
     shop.innerHTML = '<div style="font-size:18px;font-weight:600;margin-bottom:6px">Reward Shop (uses Crowd Control)</div>';
     const SHOP=[
@@ -272,7 +347,7 @@
         if((s.crowdControl||0) < it.cost){ alert('Not enough Crowd Control.'); return; }
         s.purchases=[...(s.purchases||[]), {id:uid(), itemId:it.id, name:it.name, cost:it.cost, date:today(), currency:'CC'}];
         s.crowdControl -= it.cost; if (s.crowdControl < 0) s.crowdControl = 0;
-        save(); renderStudents(); renderPanel();
+        save(); renderStudents(); renderPanel(); renderLeaderboard();
       };
       c.append(d,buy); shopGrid.append(c);
     });
@@ -285,6 +360,7 @@
       hist.append(tbl); shop.append(hist);
     }
 
+    // Right: Week tasks
     const right = document.createElement('div'); right.className='grid';
     const data = CURRICULUM.find(x=>x.w===week);
     const tasksCard=document.createElement('div'); tasksCard.className='card';
@@ -314,7 +390,7 @@
         if(data.badge && t.title.toLowerCase().includes('challenge') && !already){
           const badges = new Set(s.badges||[]); badges.add(data.badge.name); s.badges=[...badges];
         }
-        save(); renderStudents(); renderPanel();
+        save(); renderStudents(); renderPanel(); renderLeaderboard();
       };
       li.append(info, btn); list.append(li);
     });
@@ -329,12 +405,13 @@
     wrap.append(top);
   }
 
+  // ---------- Events ----------
   document.getElementById('addBtn').onclick = () => {
     const name = document.getElementById('newName').value.trim(); if(!name) return;
     const s = { id: uid(), name, xp:0, crowdControl:0, badges:[], notes:'', attendance:{}, completed:{}, purchases:[] };
-    store.students.push(s); activeStudentId = s.id; save(); document.getElementById('newName').value=''; renderStudents(); renderPanel();
+    store.students.push(s); activeStudentId = s.id; save(); document.getElementById('newName').value=''; renderStudents(); renderPanel(); renderLeaderboard();
   };
-  document.getElementById('week').oninput = () => renderPanel();
+  document.getElementById('week').oninput = () => { renderPanel(); };
   document.getElementById('exportBtn').onclick = () => { document.getElementById('io').value = JSON.stringify(store, null, 2); };
   document.getElementById('importBtn').onclick = () => {
     try{
@@ -347,13 +424,29 @@
       }
       store = obj;
       activeStudentId = (store.students[0]&&store.students[0].id)||null;
-      save(); renderStudents(); renderPanel(); alert('Imported.');
+      save(); renderStudents(); renderPanel(); renderLeaderboard(); alert('Imported.');
     }catch(e){ alert('Invalid JSON'); }
   };
-  document.getElementById('resetBtn').onclick = () => { if(confirm('Reset all data? This cannot be undone.')){ store={students:[]}; activeStudentId=null; save(); renderStudents(); renderPanel(); } };
+  document.getElementById('resetBtn').onclick = () => { if(confirm('Reset all data? This cannot be undone.')){ store={students:[]}; activeStudentId=null; save(); renderStudents(); renderPanel(); renderLeaderboard(); } };
 
+  // Tab handlers
+  document.getElementById('tab-xp').onclick = () => {
+    leaderboardMode = 'xp';
+    document.getElementById('tab-xp').classList.add('active');
+    document.getElementById('tab-cc').classList.remove('active');
+    renderLeaderboard();
+  };
+  document.getElementById('tab-cc').onclick = () => {
+    leaderboardMode = 'cc';
+    document.getElementById('tab-cc').classList.add('active');
+    document.getElementById('tab-xp').classList.remove('active');
+    renderLeaderboard();
+  };
+
+  // ---------- Init ----------
   renderStudents();
   renderPanel();
+  renderLeaderboard();
 })();
 </script>
 </body>
