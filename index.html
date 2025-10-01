@@ -5,19 +5,328 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>DJ Journey Tracker v8 — XP & Badges</title>
 <style>
-  body { font-family: Arial, sans-serif; background: #f6f7fb; margin: 0; padding: 0; }
-  .container { max-width: 1100px; margin: auto; padding: 20px; }
-  h1 { font-size: 28px; margin: 0 0 8px; }
-  .card { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 15px; margin: 10px 0; }
-  .btn { border: 1px solid #ddd; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
-  .btn.primary { background: #111; color: #fff; }
-  .muted { color: #666; font-size: 12px; }
+  :root{
+    --bg:#f6f7fb;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#111827;
+    --radius:16px;--shadow:0 1px 2px rgba(0,0,0,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  .container{max-width:1100px;margin:0 auto;padding:16px}
+  h1{font-size:28px;margin:0 0 4px} h2{margin:0 0 8px} h3{margin:0}
+  .muted{color:var(--muted)}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:12px;padding:6px 12px;cursor:pointer}
+  .btn:hover{filter:brightness(0.97)}
+  .btn.primary{background:var(--accent);color:#fff}
+  input,textarea,select{border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+  textarea{width:100%;height:120px}
+  .grid{display:grid;gap:12px}
+  @media(min-width:900px){.grid-3{grid-template-columns:1fr 2fr}}
+  .pill{border:1px solid var(--line);border-radius:999px;padding:2px 10px;display:inline-block;font-size:12px}
+  .list{display:grid;gap:8px}
+  .task{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff}
+  .badge{border:1px solid var(--line);border-radius:999px;padding:4px 10px;display:inline-block;margin:2px 4px 0 0}
+  .footer{font-size:12px;color:#9ca3af;text-align:center;padding:24px 0}
+  .table{width:100%;border-collapse:collapse}
+  .table td{border-bottom:1px solid var(--line);padding:6px}
 </style>
 </head>
 <body>
   <div class="container">
-    <h1>DJ Journey Tracker v8</h1>
-    <div class="card">This is a working standalone placeholder. The full tracker UI loads correctly without CDNs.</div>
+    <div class="row" style="justify-content:space-between">
+      <div>
+        <h1>DJ Journey Tracker v8</h1>
+        <div class="muted" style="font-size:13px">XP • Attendance • Badges • Rewards — saved in your browser (localStorage)</div>
+      </div>
+      <div class="row">
+        <label class="muted" for="week">Week</label>
+        <input id="week" type="number" min="1" max="36" value="1" style="width:80px" />
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Students</h2>
+      <div class="row" style="margin-bottom:8px">
+        <input id="newName" placeholder="Add student name" style="flex:1;min-width:220px" />
+        <button class="btn primary" id="addBtn">Add</button>
+      </div>
+      <div id="studentsList" class="grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))"></div>
+    </div>
+
+    <div id="panel"></div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="row"><h2 style="margin:0">Data & Backup</h2></div>
+        <div class="row">
+          <button class="btn" id="exportBtn">Export → Textbox</button>
+          <button class="btn" id="importBtn">Import ← Textbox</button>
+          <button class="btn" id="resetBtn" style="color:#dc2626">Reset</button>
+        </div>
+      </div>
+      <textarea id="io" placeholder="Paste JSON here to import, or click Export first."></textarea>
+    </div>
+
+    <div class="footer">DJ Journey Tracker v8 • Local only • Tip: Export before clearing browser storage.</div>
   </div>
+
+<script>
+(function(){
+  const STORAGE_KEY = 'dj_journey_tracker_v8_vanilla';
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const uid = () => Math.random().toString(36).slice(2,9);
+  const today = () => new Date().toISOString().slice(0,10);
+
+  // ---------- Curriculum ----------
+  const W = (w, unit, title, tasks, badge) => ({ w, unit, title, tasks: tasks.map((t,i)=>({ id: w+'-'+(i+1), ...t })), badge});
+  const T = (title, xp, type='class') => ({ title, xp, type });
+  const Challenge = (title, xp=30) => T('Challenge: '+title, xp, 'challenge');
+  const Side = (title, xp=25) => T('Side Quest: '+title, xp, 'sidequest');
+  const Wellness = (title) => T('Wellness: '+title, 0, 'wellness');
+  const Portfolio = (title, xp=0) => T('Portfolio: '+title, xp, 'portfolio');
+
+  const weeksDetailed = [
+    W(1,'Unit 1 — Starter Region','Welcome to DJing',[
+      T('Mon: Notes on Parts of a DJ Setup',10),
+      T('Mon: Track Analysis',10),
+      Wellness('Protect your hearing — never redline'),
+      Portfolio('Draw + label gear diagram'),
+      Side('Setup Scout — explain signal flow to a peer',20),
+      T('Tue: Identify controller parts (guided)',20),
+      T('Wed: Practice headphone cue buttons (lab)',20),
+      Portfolio('Cue diagram annotated'),
+      Challenge('Thu: Identify 5 gear parts + cue one track',30),
+      Side('Film yourself explaining gear to a parent/friend',25),
+    ]),
+    W(2,'Unit 1 — Starter Region','Song Structure & Track Anatomy',[
+      T('Mon: Bars, phrases, intros, outros',20),
+      Wellness('Stand straight, avoid wrist strain'),
+      Portfolio('Mark sections in 2 tracks'),
+      T('Tue: Count bars in popular songs',20),
+      T('Wed: Color‑code waveforms in Rekordbox',20),
+      Challenge('Thu: Identify 3 sections of a random track live',30),
+      Side('Find & mark song structure of your favorite non‑DJ track',25),
+    ]),
+    W(3,'Unit 1 — Starter Region','Cueing Basics',[
+      T('Mon: Hot cues + headphone cue',20),
+      Wellness('Keep headphone levels safe'),
+      Portfolio('Save first cue playlist'),
+      T('Tue: Set cue points in Rekordbox',20),
+      T('Wed: Practice cueing multiple songs',20),
+      Side('Hot Cue Hunter — set 5 cues in under 1 min',25),
+      Challenge('Thu: Cue a track in 30 seconds',30),
+    ]),
+    W(4,'Unit 1 — Starter Region','Track Selection & Energy',[
+      T('Mon: Energy flow + crate digging',20),
+      Wellness('Don’t panic — breathe before choosing'),
+      Portfolio('3‑song energy curve playlist'),
+      T('Tue: Energy progression in a set (guided)',20),
+      T('Wed: Build crates (lab)',20),
+      Challenge('Thu: Present playlists; peers vote',30),
+      T('Scenario: Bride requests slow jam mid‑hype set — plan response',0,'class'),
+    ]),
+    W(5,'Unit 1 — Starter Region','First Transitions',[
+      T('Mon: Crossfader + volume fader basics',20),
+      Wellness('Posture — don’t lean on faders'),
+      Portfolio('Record 30‑second transition'),
+      T('Tue: Crossfade 2 songs (guided)',20),
+      T('Wed: EQ vs crossfade transitions (lab)',20),
+      Challenge('Thu: Perform 1 clean transition',30),
+      Side('Genre Jumper — mix 2 different genres',25),
+    ]),
+    W(6,'Unit 1 — Starter Region','Gym Leader Challenge — Cue Badge',[
+      T('Mon: Review gear, cue, crossfade',20),
+      Wellness('Nerves — breathe & prep'),
+      Portfolio('Submit diagram, cue list, playlist, transition recording'),
+      T('Tue: Mock test (run full routine)',20),
+      T('Wed: Peer review — refine',20),
+      Challenge('Thu Exam: Identify gear + cue track + 2‑song transition',100),
+    ],{name:'Cue Badge',when:'Thu'}),
+  ];
+
+  function generateTemplateWeeks(start,end,unitName,weeklyTheme,badgeAtEnd,badgeName){
+    const weeks=[]; for(let w=start; w<=end; w++){
+      const weekIndex=w-start+1; const title=weeklyTheme+' — Week '+weekIndex;
+      const base=[ T('Mon: Lesson & notes',20), Portfolio('Portfolio task (upload/log)'), T('Tue: Guided practice',20), T('Wed: Lab practice',20), Challenge('Thu: Weekly challenge',30), Side('Optional side quest',25) ];
+      const badge = (badgeAtEnd && w===end) ? {name:badgeName, when:'Thu'} : undefined;
+      weeks.push(W(w,unitName,title,base,badge));
+    } return weeks;
+  }
+
+  const CURRICULUM=[
+    ...weeksDetailed,
+    ...generateTemplateWeeks(7,12,'Unit 2 — Rhythm City','Rhythm & Beatmatching',true,'Beat Badge'),
+    ...generateTemplateWeeks(13,18,'Unit 3 — Harmony Heights','Harmony & Keys',true,'Harmony Badge'),
+    ...generateTemplateWeeks(19,24,'Unit 4 — Remix Canyon','Sampling & Remix',true,'Remix Badge'),
+    ...generateTemplateWeeks(25,27,'Unit 5 — Setup Summit','Setups & Troubleshooting',true,'Setup Badge'),
+    ...generateTemplateWeeks(28,31,'Unit 6 — Styles Arena','Styles & Roles',true,'Style Badge'),
+    ...generateTemplateWeeks(32,34,'Unit 7 — Genre Forge','Global Genres',true,'Genre Badge'),
+    ...generateTemplateWeeks(35,36,'Unit 8 — Turntablist Tower','Scratching & Battles',true,'Scratch Badge'),
+  ];
+
+  // ---------- State ----------
+  let store = load() || { students: [] };
+  let activeStudentId = (store.students[0] && store.students[0].id) || null;
+
+  function load(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){ return null; } }
+  function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); }catch(e){} }
+
+  // ---------- Rendering ----------
+  function renderStudents(){
+    const list = document.getElementById('studentsList'); list.innerHTML='';
+    store.students.forEach(s => {
+      const card = document.createElement('div'); card.className='card';
+      const name = document.createElement('input'); name.value=s.name; name.oninput=()=>{ s.name=name.value; save(); renderPanel(); };
+      name.style.width='100%';
+      const meta = document.createElement('div'); meta.className='muted'; meta.style.fontSize='12px'; meta.textContent = `XP: ${s.xp||0} • Badges: ${(s.badges||[]).length}`;
+      const row = document.createElement('div'); row.className='row';
+      const open = document.createElement('button'); open.className='btn'; open.textContent='Open'; open.onclick=()=>{ activeStudentId=s.id; renderPanel(); };
+      const del = document.createElement('button'); del.className='btn'; del.style.color='#dc2626'; del.textContent='Remove'; del.onclick=()=>{ store.students=store.students.filter(x=>x.id!==s.id); if(activeStudentId===s.id) activeStudentId=(store.students[0]&&store.students[0].id)||null; save(); renderStudents(); renderPanel(); };
+      row.append(open, del);
+      card.append(name, meta, row); list.append(card);
+    });
+  }
+
+  function renderPanel(){
+    const wrap = document.getElementById('panel'); wrap.innerHTML='';
+    const s = store.students.find(x=>x.id===activeStudentId);
+    if(!s){ wrap.innerHTML = '<div class="card muted" style="text-align:center">Add a student to get started.</div>'; return; }
+
+    const week = parseInt(document.getElementById('week').value)||1;
+
+    const top = document.createElement('div'); top.className='grid grid-3';
+
+    // Left summary
+    const left = document.createElement('div'); left.className='card';
+    left.innerHTML = `
+      <div class="muted" style="text-transform:uppercase;font-size:12px;letter-spacing:.05em">Student</div>
+      <div style="font-size:22px;font-weight:700;margin-bottom:8px">${s.name}</div>
+      <div class="row">
+        <div class="card" style="text-align:center">
+          <div class="muted" style="font-size:12px">XP</div>
+          <div style="font-size:18px;font-weight:600">${s.xp||0}</div>
+        </div>
+        <div class="card" style="text-align:center">
+          <div class="muted" style="font-size:12px">Level</div>
+          <div style="font-size:18px;font-weight:600">${1+Math.floor((s.xp||0)/100)}</div>
+        </div>
+      </div>
+    `;
+
+    // XP buttons
+    const xpRow = document.createElement('div'); xpRow.className='row';
+    [10,20,30,50,100].forEach(n=>{
+      const b=document.createElement('button'); b.className='btn'; b.textContent='+'+n+' XP'; b.onclick=()=>{ s.xp=(s.xp||0)+n; save(); renderStudents(); renderPanel(); };
+      xpRow.append(b);
+    });
+    left.append(xpRow);
+
+    // Badges
+    const badgeBox = document.createElement('div'); badgeBox.style.marginTop='12px';
+    badgeBox.innerHTML = '<div class="muted" style="font-size:14px;margin-bottom:4px">Badges</div>';
+    const rack = document.createElement('div'); (s.badges||[]).forEach(b=>{ const tag=document.createElement('div'); tag.className='badge'; tag.textContent=b; rack.append(tag); });
+    if(!(s.badges||[]).length){ const none=document.createElement('div'); none.className='muted'; none.textContent='No badges yet.'; rack.append(none); }
+    badgeBox.append(rack);
+    left.append(badgeBox);
+
+    // Notes
+    const notes = document.createElement('div'); notes.style.marginTop='12px';
+    notes.innerHTML = '<label class="muted" style="font-size:14px">Notes</label>';
+    const ta=document.createElement('textarea'); ta.value=s.notes||''; ta.oninput=()=>{ s.notes=ta.value; save(); }; notes.append(ta);
+    left.append(notes);
+
+    // Attendance
+    const att = document.createElement('div'); att.className='card'; att.style.marginTop='12px';
+    const rec = (s.attendance&&s.attendance[week])||{}; const days=['Mon','Tue','Wed','Thu'];
+    const attRow=document.createElement('div'); attRow.className='row';
+    att.innerHTML = `<div class="muted" style="font-size:14px;margin-bottom:6px">Attendance (Week ${week})</div>`;
+    days.forEach(d=>{ const btn=document.createElement('button'); btn.className='btn'; if(rec[d]) btn.style.background='#d1fae5'; btn.textContent=d; btn.onclick=()=>{ const newRec={...rec}; newRec[d]=!rec[d]; s.attendance = {...(s.attendance||{}), [week]: newRec}; save(); renderPanel(); }; attRow.append(btn); });
+    const mark=document.createElement('div'); mark.className='muted'; mark.style.fontSize='12px'; mark.style.marginTop='6px'; mark.textContent=`Marked: ${days.filter(d=>rec[d]).length}/4`;
+    att.append(attRow, mark);
+
+    // Reward shop
+    const shop = document.createElement('div'); shop.className='card'; shop.style.marginTop='12px';
+    shop.innerHTML = '<div style="font-size:18px;font-weight:600;margin-bottom:6px">Reward Shop</div>';
+    const SHOP=[
+      {id:'sticker',name:'Sticker',cost:50},
+      {id:'cue-pin',name:'Cue Badge Pin',cost:200},
+      {id:'song-request',name:'Song Request Pass',cost:120},
+      {id:'extra-credit',name:'Extra Credit +25 XP',cost:100},
+      {id:'dj-pass',name:'Lunch DJ Slot',cost:250},
+      {id:'boss-battle',name:'Boss Battle: 1v1 DJ',cost:180},
+    ];
+    const shopGrid=document.createElement('div'); shopGrid.style.display='grid'; shopGrid.style.gridTemplateColumns='repeat(auto-fill,minmax(240px,1fr))'; shopGrid.style.gap='8px';
+    SHOP.forEach(it=>{ const c=document.createElement('div'); c.className='card'; c.style.display='flex'; c.style.justifyContent='space-between'; c.style.alignItems='center';
+      const d=document.createElement('div'); d.innerHTML = `<div style="font-weight:600">${it.name}</div><div class="muted" style="font-size:12px">Cost: ${it.cost} XP</div>`;
+      const buy=document.createElement('button'); buy.className='btn'; buy.textContent='Buy'; buy.onclick=()=>{ if((s.xp||0) < it.cost){ alert('Not enough XP.'); return; } s.purchases=[...(s.purchases||[]), {id:uid(), itemId:it.id, name:it.name, cost:it.cost, date:today()}]; s.xp-=it.cost; save(); renderStudents(); renderPanel(); };
+      c.append(d,buy); shopGrid.append(c);
+    });
+    shop.append(shopGrid);
+    if(s.purchases && s.purchases.length){
+      const hist=document.createElement('div'); hist.className='card'; hist.style.marginTop='8px';
+      hist.innerHTML='<div class="muted" style="font-size:14px;margin-bottom:4px">Purchase History</div>';
+      const tbl=document.createElement('table'); tbl.className='table';
+      s.purchases.forEach(p=>{ const tr=document.createElement('tr'); tr.innerHTML = `<td>${p.date} — ${p.name}</td><td style="text-align:right" class="muted">-${p.cost} XP</td>`; tbl.append(tr); });
+      hist.append(tbl); shop.append(hist);
+    }
+
+    // Right: Week tasks
+    const right = document.createElement('div'); right.className='grid';
+    const data = CURRICULUM.find(x=>x.w===week);
+    const tasksCard=document.createElement('div'); tasksCard.className='card';
+    const badgePill = data && data.badge ? `<span class="pill">🏅 Badge Week: ${data.badge.name}</span>` : '';
+    tasksCard.innerHTML = `<div class="row" style="justify-content:space-between;margin-bottom:6px"><div><div class="muted" style="text-transform:uppercase;font-size:12px;letter-spacing:.05em">${data?data.unit:''}</div><h3>Week ${data?data.w:week}: ${data?data.title:'No week data'}</h3></div>${badgePill}</div>`;
+
+    const list=document.createElement('div'); list.className='list';
+    const completed = s.completed || {};
+    (data?data.tasks:[]).forEach(t=>{
+      const li=document.createElement('div'); li.className='task';
+      const info=document.createElement('div'); info.innerHTML = `<div style="font-weight:600">${t.title}</div><div class="muted" style="font-size:12px">Type: ${t.type} ${t.xp? '• XP '+t.xp:''}</div>`;
+      const btn=document.createElement('button'); btn.className='btn';
+      const done=!!completed[t.id];
+      btn.textContent = done ? 'Completed' : 'Mark +XP';
+      if(done){ btn.classList.add('primary'); }
+      btn.onclick=()=>{
+        const already = !!(s.completed||{})[t.id];
+        const newComp = {...(s.completed||{})}; newComp[t.id] = !already; s.completed=newComp;
+        let delta=0; if(!already) delta+= (t.xp||0); else delta -= (t.xp||0);
+        s.xp = Math.max(0,(s.xp||0)+delta);
+        if(data.badge && t.title.toLowerCase().includes('challenge') && !already){
+          const badges = new Set(s.badges||[]); badges.add(data.badge.name); s.badges=[...badges];
+        }
+        save(); renderStudents(); renderPanel();
+      };
+      li.append(info, btn); list.append(li);
+    });
+    tasksCard.append(list);
+
+    // Append columns
+    top.append(left, right);
+    right.append(tasksCard);
+
+    // Attendance + Shop under the left column
+    const sideStack = document.createElement('div'); sideStack.append(att, shop);
+    top.insertBefore(sideStack, right);
+
+    wrap.append(top);
+  }
+
+  // ---------- Events ----------
+  document.getElementById('addBtn').onclick = () => {
+    const name = document.getElementById('newName').value.trim(); if(!name) return;
+    const s = { id: uid(), name, xp:0, badges:[], notes:'', attendance:{}, completed:{}, purchases:[] };
+    store.students.push(s); activeStudentId = s.id; save(); document.getElementById('newName').value=''; renderStudents(); renderPanel();
+  };
+  document.getElementById('week').oninput = () => renderPanel();
+  document.getElementById('exportBtn').onclick = () => { document.getElementById('io').value = JSON.stringify(store, null, 2); };
+  document.getElementById('importBtn').onclick = () => { try{ const obj = JSON.parse(document.getElementById('io').value); store = obj; activeStudentId = (store.students[0]&&store.students[0].id)||null; save(); renderStudents(); renderPanel(); alert('Imported.'); }catch(e){ alert('Invalid JSON'); } };
+  document.getElementById('resetBtn').onclick = () => { if(confirm('Reset all data? This cannot be undone.')){ store={students:[]}; activeStudentId=null; save(); renderStudents(); renderPanel(); } };
+
+  // ---------- Init ----------
+  renderStudents();
+  renderPanel();
+})();
+</script>
 </body>
 </html>
