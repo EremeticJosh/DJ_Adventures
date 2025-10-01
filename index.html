@@ -5,17 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>DJ Journey Tracker v8 — XP & Badges</title>
   <meta name="description" content="Track student XP, attendance, badges, and curriculum tasks for a DJ program." />
-  <!-- Tailwind CSS via CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- React 18 + ReactDOM via CDN -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Tailwind CSS via jsDelivr CDN -->
+  <script defer src="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.13/lib/index.min.js"></script>
+  <!-- React 18 + ReactDOM via jsDelivr (pinned versions) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <style>
+    /* Minimal fallback styles if Tailwind fails to load */
+    .container { max-width: 1024px; margin: 0 auto; padding: 1rem; }
+    .card { border: 1px solid #e5e7eb; border-radius: 1rem; padding: 1rem; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+    .btn { border: 1px solid #e5e7eb; border-radius: 0.75rem; padding: 0.25rem 0.75rem; background: white; cursor: pointer; }
+    .btn-primary { background: #111827; color: white; }
+    .muted { color: #6b7280; font-size: .875rem; }
+    .input { border: 1px solid #e5e7eb; border-radius: .75rem; padding: .5rem .75rem; }
+    body { background: #f9fafb; color: #111827; }
+  </style>
 </head>
-<body class="bg-gray-50 text-gray-900">
-  <div id="root"></div>
+<body>
+  <div id="root" class="container"></div>
 
   <script type="text/javascript">
-  ;(() => {
+  // Wrap after window load to ensure CDNs are available
+  window.addEventListener('load', function () {
+    if (!(window.React && window.ReactDOM)) {
+      document.getElementById('root').innerHTML = '<div class="card">\
+        <h2 style="font-weight:600;margin-bottom:.5rem">CDN Blocked</h2>\
+        <p class="muted">Your network might be blocking the JS libraries. Try a different network or the other index.html I provided.</p>\
+      </div>';
+      return;
+    }
     const { useEffect, useMemo, useState } = React;
 
     const STORAGE_KEY = "dj_journey_tracker_v8";
@@ -27,19 +45,15 @@
         try {
           const raw = localStorage.getItem(key);
           return raw ? JSON.parse(raw) : initial;
-        } catch (e) {
-          return initial;
-        }
+        } catch (e) { return initial; }
       });
       useEffect(() => {
-        try {
-          localStorage.setItem(key, JSON.stringify(state));
-        } catch (e) {}
+        try { localStorage.setItem(key, JSON.stringify(state)); } catch (e) {}
       }, [key, state]);
       return [state, setState];
     }
 
-    // ---------------------- Curriculum ----------------------
+    // Curriculum helpers
     const W = (w, unit, title, tasks, badge) => ({ w, unit, title, tasks: tasks.map((t, i) => ({ id: \`\${w}-\${i+1}\`, ...t })), badge });
     const T = (title, xp, type = "class") => ({ title, xp, type });
     const Challenge = (title, xp = 30) => T(\`Challenge: \${title}\`, xp, "challenge");
@@ -153,22 +167,19 @@
       { id: "boss-battle", name: "Boss Battle: 1v1 DJ", cost: 180 },
     ];
 
-    // ---------------------- UI Components ----------------------
     function Header({ activeWeek, setActiveWeek, totalWeeks }) {
-      return (
-        React.createElement("div", { className: "flex flex-col gap-3 md:flex-row md:items-end md:justify-between" },
-          React.createElement("div", null,
-            React.createElement("h1", { className: "text-3xl font-bold" }, "DJ Journey Tracker v8"),
-            React.createElement("p", { className: "text-sm text-gray-500" }, "XP • Attendance • Badges • Rewards — saved locally")
-          ),
-          React.createElement("div", { className: "flex items-center gap-2" },
-            React.createElement("label", { className: "text-sm" }, "Week"),
-            React.createElement("input", {
-              type: "number", min: 1, max: totalWeeks, value: activeWeek,
-              onChange: (e) => setActiveWeek(Number(e.target.value)),
-              className: "w-20 rounded-xl border px-3 py-1"
-            })
-          )
+      return React.createElement("div", { className: "flex flex-col gap-3 md:flex-row md:items-end md:justify-between" },
+        React.createElement("div", null,
+          React.createElement("h1", { className: "text-3xl font-bold" }, "DJ Journey Tracker v8"),
+          React.createElement("p", { className: "text-sm text-gray-500 muted" }, "XP • Attendance • Badges • Rewards — saved locally")
+        ),
+        React.createElement("div", { className: "flex items-center gap-2" },
+          React.createElement("label", { className: "text-sm" }, "Week"),
+          React.createElement("input", {
+            type: "number", min: 1, max: totalWeeks, value: activeWeek,
+            onChange: (e) => setActiveWeek(Number(e.target.value)),
+            className: "w-20 rounded-xl border px-3 py-1 input"
+          })
         )
       );
     }
@@ -177,52 +188,35 @@
       const [name, setName] = useState("");
       const add = () => {
         if (!name.trim()) return;
-        const s = {
-          id: uid(),
-          name: name.trim(),
-          xp: 0,
-          badges: [],
-          notes: "",
-          attendance: {}, // { week: {Mon:true, ...}}
-          completed: {},  // { taskId: true }
-          purchases: [],
-        };
+        const s = { id: uid(), name: name.trim(), xp: 0, badges: [], notes: "", attendance: {}, completed: {}, purchases: [] };
         setStudents((arr) => [...arr, s]);
         setName("");
         setActiveStudentId(s.id);
       };
       const remove = (id) => setStudents((arr) => arr.filter((s) => s.id !== id));
       const rename = (id, newName) => setStudents((arr) => arr.map((s) => (s.id === id ? { ...s, name: newName } : s)));
-
-      return (
-        React.createElement("div", { className: "rounded-2xl border p-4 shadow-sm" },
-          React.createElement("h2", { className: "mb-2 text-xl font-semibold" }, "Students"),
-          React.createElement("div", { className: "mb-3 flex gap-2" },
-            React.createElement("input", {
-              placeholder: "Add student name", value: name,
-              onChange: (e) => setName(e.target.value),
-              onKeyDown: (e) => e.key === "Enter" && add(),
-              className: "flex-1 rounded-xl border px-3 py-2"
-            }),
-            React.createElement("button", { onClick: add, className: "rounded-xl bg-black px-4 py-2 text-white hover:opacity-90" }, "Add")
-          ),
-          React.createElement("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3" },
-            students.map((s) =>
-              React.createElement("div", { key: s.id, className: "flex items-center justify-between rounded-xl border p-3" },
-                React.createElement("div", null,
-                  React.createElement("input", {
-                    value: s.name, onChange: (e) => rename(s.id, e.target.value),
-                    className: "rounded-lg border px-2 py-1"
-                  }),
-                  React.createElement("div", { className: "text-xs text-gray-500" }, \`XP: \${s.xp} • Badges: \${s.badges.length}\`)
-                ),
-                React.createElement("div", { className: "flex gap-2" },
-                  React.createElement("button", { onClick: () => setActiveStudentId(s.id), className: "rounded-lg border px-3 py-1" }, "Open"),
-                  React.createElement("button", { onClick: () => remove(s.id), className: "rounded-lg border px-3 py-1 text-red-600" }, "Remove")
-                )
-              )
+      return React.createElement("div", { className: "card" },
+        React.createElement("h2", { className: "mb-2 text-xl font-semibold" }, "Students"),
+        React.createElement("div", { className: "mb-3 flex gap-2" },
+          React.createElement("input", {
+            placeholder: "Add student name", value: name,
+            onChange: (e) => setName(e.target.value),
+            onKeyDown: (e) => e.key === "Enter" && add(),
+            className: "flex-1 input"
+          }),
+          React.createElement("button", { onClick: add, className: "btn btn-primary" }, "Add")
+        ),
+        React.createElement("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3" },
+          students.map((s) => React.createElement("div", { key: s.id, className: "flex items-center justify-between card" },
+            React.createElement("div", null,
+              React.createElement("input", { value: s.name, onChange: (e) => rename(s.id, e.target.value), className: "input" }),
+              React.createElement("div", { className: "text-xs muted" }, `XP: ${s.xp} • Badges: ${s.badges.length}`)
+            ),
+            React.createElement("div", { className: "flex gap-2" },
+              React.createElement("button", { onClick: () => setActiveStudentId(s.id), className: "btn" }, "Open"),
+              React.createElement("button", { onClick: () => remove(s.id), className: "btn", style: { color: "#dc2626" } }, "Remove")
             )
-          )
+          ))
         )
       );
     }
@@ -230,9 +224,7 @@
     function XPButtons({ onGive }) {
       const amounts = [10, 20, 30, 50, 100];
       return React.createElement("div", { className: "flex flex-wrap items-center gap-2" },
-        amounts.map((n) =>
-          React.createElement("button", { key: n, onClick: () => onGive(n), className: "rounded-xl border px-3 py-1" }, \`+\${n} XP\`)
-        )
+        amounts.map((n) => React.createElement("button", { key: n, onClick: () => onGive(n), className: "btn" }, `+${n} XP`))
       );
     }
 
@@ -245,68 +237,49 @@
         updateStudent({ attendance: att });
       };
       const count = days.filter((d) => rec[d]).length;
-      return (
-        React.createElement("div", { className: "rounded-xl border p-3" },
-          React.createElement("div", { className: "mb-1 text-sm font-medium" }, \`Attendance (Week \${week})\`),
-          React.createElement("div", { className: "flex gap-2" },
-            days.map((d) =>
-              React.createElement("button", {
-                key: d, onClick: () => toggle(d),
-                className: \`rounded-lg px-3 py-1 border \${rec[d] ? "bg-green-100" : "bg-white"}\`
-              }, d)
-            )
-          ),
-          React.createElement("div", { className: "mt-2 text-xs text-gray-500" }, \`Marked: \${count}/4\`)
-        )
+      return React.createElement("div", { className: "card" },
+        React.createElement("div", { className: "mb-1 text-sm font-medium" }, `Attendance (Week ${week})`),
+        React.createElement("div", { className: "flex gap-2" },
+          days.map((d) => React.createElement("button", {
+            key: d, onClick: () => toggle(d),
+            className: "btn", style: { background: rec[d] ? "#d1fae5" : "white" }
+          }, d))
+        ),
+        React.createElement("div", { className: "mt-2 text-xs muted" }, `Marked: ${count}/4`)
       );
     }
 
     function WeekTasks({ week, student, updateStudent, onAwardBadge }) {
       const data = useMemo(() => CURRICULUM.find((x) => x.w === week), [week]);
-      if (!data) return React.createElement("div", { className: "italic text-gray-500" }, "No week data.");
-
+      if (!data) return React.createElement("div", { className: "muted" }, "No week data.");
       const completed = student.completed || {};
       const toggleTask = (task) => {
         const key = task.id;
         const already = !!completed[key];
         const newCompleted = { ...completed, [key]: !already };
-
         let delta = 0;
-        if (!already) delta += task.xp || 0;
-        else delta -= task.xp || 0;
-
+        if (!already) delta += task.xp || 0; else delta -= task.xp || 0;
         const newXP = Math.max(0, (student.xp || 0) + delta);
-
-        if (data.badge && task.title.toLowerCase().includes("challenge") && !already) {
-          onAwardBadge(data.badge.name);
-        }
-
+        if (data.badge && task.title.toLowerCase().includes("challenge") && !already) onAwardBadge(data.badge.name);
         updateStudent({ completed: newCompleted, xp: newXP });
       };
-
-      return (
-        React.createElement("div", { className: "rounded-2xl border p-4 shadow-sm" },
-          React.createElement("div", { className: "mb-2 flex flex-wrap items-end justify-between gap-2" },
-            React.createElement("div", null,
-              React.createElement("div", { className: "text-xs uppercase tracking-wide text-gray-500" }, data.unit),
-              React.createElement("h3", { className: "text-lg font-semibold" }, \`Week \${data.w}: \${data.title}\`)
-            ),
-            data.badge ? React.createElement("div", { className: "rounded-full border px-3 py-1 text-sm" }, \`🏅 Badge Week: \${data.badge.name}\`) : null
+      return React.createElement("div", { className: "card" },
+        React.createElement("div", { className: "mb-2 flex flex-wrap items-end justify-between gap-2" },
+          React.createElement("div", null,
+            React.createElement("div", { className: "text-xs uppercase tracking-wide muted" }, data.unit),
+            React.createElement("h3", { className: "text-lg font-semibold" }, `Week ${data.w}: ${data.title}`)
           ),
-          React.createElement("ol", { className: "space-y-2" },
-            data.tasks.map((t) =>
-              React.createElement("li", { key: t.id, className: "flex items-center justify-between gap-3 rounded-xl border p-2" },
-                React.createElement("div", null,
-                  React.createElement("div", { className: "font-medium" }, t.title),
-                  React.createElement("div", { className: "text-xs text-gray-500" }, \`Type: \${t.type} \${t.xp ? "• XP " + t.xp : ""}\`)
-                ),
-                React.createElement("button", {
-                  onClick: () => toggleTask(t),
-                  className: \`rounded-xl px-3 py-1 border \${completed[t.id] ? "bg-black text-white" : "bg-white"}\`
-                }, completed[t.id] ? "Completed" : "Mark +XP")
-              )
-            )
-          )
+          data.badge ? React.createElement("div", { className: "btn" }, `🏅 Badge Week: ${data.badge.name}`) : null
+        ),
+        React.createElement("ol", { className: "space-y-2" },
+          data.tasks.map((t) => React.createElement("li", { key: t.id, className: "flex items-center justify-between gap-3 card" },
+            React.createElement("div", null,
+              React.createElement("div", { className: "font-medium" }, t.title),
+              React.createElement("div", { className: "text-xs muted" }, `Type: ${t.type} ${t.xp ? "• XP " + t.xp : ""}`)
+            ),
+            React.createElement("button", { onClick: () => toggleTask(t), className: "btn", style: completed[t.id] ? { background: "#111827", color: "white" } : {} },
+              completed[t.id] ? "Completed" : "Mark +XP")
+          ))
         )
       );
     }
@@ -317,94 +290,80 @@
         const purchases = [...(student.purchases || []), { id: uid(), itemId: item.id, name: item.name, cost: item.cost, date: today() }];
         updateStudent({ purchases, xp: student.xp - item.cost });
       };
-      return (
-        React.createElement("div", { className: "rounded-2xl border p-4 shadow-sm" },
-          React.createElement("div", { className: "mb-2 text-xl font-semibold" }, "Reward Shop"),
-          React.createElement("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3" },
-            SHOP.map((it) =>
-              React.createElement("div", { key: it.id, className: "flex items-center justify-between rounded-xl border p-3" },
-                React.createElement("div", null,
-                  React.createElement("div", { className: "font-medium" }, it.name),
-                  React.createElement("div", { className: "text-xs text-gray-500" }, \`Cost: \${it.cost} XP\`)
-                ),
-                React.createElement("button", { onClick: () => buy(it), className: "rounded-xl border px-3 py-1" }, "Buy")
-              )
-            )
-          ),
-          student.purchases && student.purchases.length
-            ? React.createElement("div", { className: "mt-3 rounded-xl border p-3" },
-                React.createElement("div", { className: "mb-1 text-sm font-medium" }, "Purchase History"),
-                React.createElement("ul", { className: "text-sm" },
-                  student.purchases.map((p) =>
-                    React.createElement("li", { key: p.id, className: "flex justify-between border-b py-1 last:border-0" },
-                      React.createElement("span", null, \`\${p.date} — \${p.name}\`),
-                      React.createElement("span", { className: "text-gray-500" }, \`-\${p.cost} XP\`)
-                    )
-                  )
-                )
-              )
-            : null
-        )
+      return React.createElement("div", { className: "card" },
+        React.createElement("div", { className: "mb-2 text-xl font-semibold" }, "Reward Shop"),
+        React.createElement("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3" },
+          SHOP.map((it) => React.createElement("div", { key: it.id, className: "flex items-center justify-between card" },
+            React.createElement("div", null,
+              React.createElement("div", { className: "font-medium" }, it.name),
+              React.createElement("div", { className: "text-xs muted" }, `Cost: ${it.cost} XP`)
+            ),
+            React.createElement("button", { onClick: () => buy(it), className: "btn" }, "Buy")
+          ))
+        ),
+        student.purchases && student.purchases.length ? React.createElement("div", { className: "mt-3 card" },
+          React.createElement("div", { className: "mb-1 text-sm font-medium" }, "Purchase History"),
+          React.createElement("ul", { className: "text-sm" },
+            student.purchases.map((p) => React.createElement("li", { key: p.id, className: "flex justify-between", style: { borderBottom: "1px solid #e5e7eb", padding: ".25rem 0" } },
+              React.createElement("span", null, `${p.date} — ${p.name}`),
+              React.createElement("span", { className: "muted" }, `-${p.cost} XP`)
+            ))
+          )
+        ) : null
       );
     }
 
     function BadgeRack({ badges }) {
-      if (!badges || badges.length === 0) return React.createElement("div", { className: "text-sm text-gray-500" }, "No badges yet.");
+      if (!badges || badges.length === 0) return React.createElement("div", { className: "muted" }, "No badges yet.");
       return React.createElement("div", { className: "flex flex-wrap gap-2" },
-        badges.map((b, i) => React.createElement("div", { key: i, className: "rounded-full border px-3 py-1 text-sm" }, b))
+        badges.map((b, i) => React.createElement("div", { key: i, className: "btn" }, b))
       );
     }
 
     function StudentPanel({ student, setStudents, week }) {
-      const updateStudent = (patch) => {
-        setStudents((arr) => arr.map((s) => (s.id === student.id ? { ...s, ...patch } : s)));
-      };
+      const updateStudent = (patch) => setStudents((arr) => arr.map((s) => (s.id === student.id ? { ...s, ...patch } : s)));
       const giveXP = (n) => updateStudent({ xp: (student.xp || 0) + n });
       const awardBadge = (name) => {
         const list = student.badges || [];
         if (list.includes(name)) return;
         updateStudent({ badges: [...list, name] });
       };
-
       const level = 1 + Math.floor((student.xp || 0) / 100);
-
-      return (
-        React.createElement("div", { className: "grid grid-cols-1 gap-4 md:grid-cols-3" },
-          React.createElement("div", { className: "md:col-span-1 space-y-3" },
-            React.createElement("div", { className: "rounded-2xl border p-4 shadow-sm" },
-              React.createElement("div", { className: "mb-1 text-xs uppercase tracking-wide text-gray-500" }, "Student"),
-              React.createElement("div", { className: "text-2xl font-bold" }, student.name),
-              React.createElement("div", { className: "mt-2 flex items-center gap-3" },
-                React.createElement("div", { className: "rounded-xl border px-3 py-2 text-center" },
-                  React.createElement("div", { className: "text-xs text-gray-500" }, "XP"),
-                  React.createElement("div", { className: "text-xl font-semibold" }, student.xp)
-                ),
-                React.createElement("div", { className: "rounded-xl border px-3 py-2 text-center" },
-                  React.createElement("div", { className: "text-xs text-gray-500" }, "Level"),
-                  React.createElement("div", { className: "text-xl font-semibold" }, level)
-                )
+      return React.createElement("div", { className: "grid grid-cols-1 gap-4 md:grid-cols-3" },
+        React.createElement("div", { className: "md:col-span-1 space-y-3" },
+          React.createElement("div", { className: "card" },
+            React.createElement("div", { className: "mb-1 text-xs uppercase tracking-wide muted" }, "Student"),
+            React.createElement("div", { className: "text-2xl font-bold" }, student.name),
+            React.createElement("div", { className: "mt-2 flex items-center gap-3" },
+              React.createElement("div", { className: "card", style: { textAlign: "center" } },
+                React.createElement("div", { className: "text-xs muted" }, "XP"),
+                React.createElement("div", { className: "text-xl font-semibold" }, student.xp)
               ),
-              React.createElement("div", { className: "mt-3" }, React.createElement(XPButtons, { onGive: giveXP })),
-              React.createElement("div", { className: "mt-4" },
-                React.createElement("div", { className: "mb-1 text-sm font-medium" }, "Badges"),
-                React.createElement(BadgeRack, { badges: student.badges })
-              ),
-              React.createElement("div", { className: "mt-4" },
-                React.createElement("label", { className: "mb-1 block text-sm font-medium" }, "Notes"),
-                React.createElement("textarea", {
-                  value: student.notes || "",
-                  onChange: (e) => updateStudent({ notes: e.target.value }),
-                  className: "h-28 w-full rounded-xl border p-2",
-                  placeholder: "Progress notes, feedback, goals..."
-                })
+              React.createElement("div", { className: "card", style: { textAlign: "center" } },
+                React.createElement("div", { className: "text-xs muted" }, "Level"),
+                React.createElement("div", { className: "text-xl font-semibold" }, level)
               )
             ),
-            React.createElement(Attendance, { student, week, updateStudent }),
-            React.createElement(RewardShop, { student, updateStudent })
+            React.createElement("div", { className: "mt-3" }, React.createElement(XPButtons, { onGive: giveXP })),
+            React.createElement("div", { className: "mt-4" },
+              React.createElement("div", { className: "mb-1 text-sm font-medium" }, "Badges"),
+              React.createElement(BadgeRack, { badges: student.badges })
+            ),
+            React.createElement("div", { className: "mt-4" },
+              React.createElement("label", { className: "mb-1 block text-sm font-medium" }, "Notes"),
+              React.createElement("textarea", {
+                value: student.notes || "",
+                onChange: (e) => updateStudent({ notes: e.target.value }),
+                className: "input", style: { width: "100%", height: "7rem" },
+                placeholder: "Progress notes, feedback, goals..."
+              })
+            )
           ),
-          React.createElement("div", { className: "md:col-span-2 space-y-3" },
-            React.createElement(WeekTasks, { week, student, updateStudent, onAwardBadge: awardBadge })
-          )
+          React.createElement(Attendance, { student, week, updateStudent }),
+          React.createElement(RewardShop, { student, updateStudent })
+        ),
+        React.createElement("div", { className: "md:col-span-2 space-y-3" },
+          React.createElement(WeekTasks, { week, student, updateStudent, onAwardBadge: awardBadge })
         )
       );
     }
@@ -414,35 +373,22 @@
       const [txt, setTxt] = useState("");
       const exportData = () => setTxt(JSON.stringify(data, null, 2));
       const importData = () => {
-        try {
-          const obj = JSON.parse(txt);
-          setData(obj);
-          alert("Imported.");
-        } catch (e) {
-          alert("Invalid JSON");
-        }
+        try { const obj = JSON.parse(txt); setData(obj); alert("Imported."); }
+        catch (e) { alert("Invalid JSON"); }
       };
-      const reset = () => {
-        if (confirm("Reset all data? This cannot be undone.")) setData({ students: [] });
-      };
-      return (
-        React.createElement("div", { className: "rounded-2xl border p-4 shadow-sm" },
-          React.createElement("div", { className: "mb-2 flex items-center justify-between" },
-            React.createElement("div", { className: "text-xl font-semibold" }, "Data & Backup"),
-            React.createElement("button", { onClick: () => setShow((v) => !v), className: "rounded-xl border px-3 py-1" }, show ? "Hide" : "Show")
+      const reset = () => { if (confirm("Reset all data? This cannot be undone.")) setData({ students: [] }); };
+      return React.createElement("div", { className: "card" },
+        React.createElement("div", { className: "mb-2 flex items-center justify-between" },
+          React.createElement("div", { className: "text-xl font-semibold" }, "Data & Backup"),
+          React.createElement("button", { onClick: () => setShow((v) => !v), className: "btn" }, show ? "Hide" : "Show")
+        ),
+        show && React.createElement("div", { className: "space-y-2" },
+          React.createElement("div", { className: "flex flex-wrap gap-2" },
+            React.createElement("button", { onClick: exportData, className: "btn" }, "Export → Textbox"),
+            React.createElement("button", { onClick: importData, className: "btn" }, "Import ← Textbox"),
+            React.createElement("button", { onClick: reset, className: "btn", style: { color: "#dc2626" } }, "Reset")
           ),
-          show && React.createElement("div", { className: "space-y-2" },
-            React.createElement("div", { className: "flex flex-wrap gap-2" },
-              React.createElement("button", { onClick: exportData, className: "rounded-xl border px-3 py-1" }, "Export → Textbox"),
-              React.createElement("button", { onClick: importData, className: "rounded-xl border px-3 py-1" }, "Import ← Textbox"),
-              React.createElement("button", { onClick: reset, className: "rounded-xl border px-3 py-1 text-red-600" }, "Reset")
-            ),
-            React.createElement("textarea", {
-              className: "h-52 w-full rounded-xl border p-2",
-              value: txt, onChange: (e) => setTxt(e.target.value),
-              placeholder: "Paste JSON here to import, or click Export first."
-            })
-          )
+          React.createElement("textarea", { className: "input", style: { width: "100%", height: "13rem" }, value: txt, onChange: (e) => setTxt(e.target.value), placeholder: "Paste JSON here to import, or click Export first." })
         )
       );
     }
@@ -451,33 +397,24 @@
       const [store, setStore] = useLocalState(STORAGE_KEY, { students: [] });
       const [activeWeek, setActiveWeek] = useState(1);
       const [activeStudentId, setActiveStudentId] = useState(null);
-
       const students = store.students || [];
-      const setStudents = (fnOrArr) => {
-        setStore((s) => ({ ...s, students: typeof fnOrArr === "function" ? fnOrArr(s.students || []) : fnOrArr }));
-      };
+      const setStudents = (fnOrArr) => setStore((s) => ({ ...s, students: typeof fnOrArr === "function" ? fnOrArr(s.students || []) : fnOrArr }));
       const activeStudent = students.find((s) => s.id === activeStudentId) || students[0];
-
-      useEffect(() => {
-        if (students.length && !activeStudentId) setActiveStudentId(students[0].id);
-      }, [students.length]);
-
-      return (
-        React.createElement("div", { className: "mx-auto max-w-6xl space-y-4 p-4" },
-          React.createElement(Header, { activeWeek, setActiveWeek, totalWeeks: 36 }),
-          React.createElement(StudentManager, { students, setStudents, setActiveStudentId }),
-          activeStudent
-            ? React.createElement(StudentPanel, { student: activeStudent, setStudents, week: activeWeek })
-            : React.createElement("div", { className: "rounded-2xl border p-10 text-center text-gray-500" }, "Add a student to get started."),
-          React.createElement(DataMenu, { data: store, setData: setStore }),
-          React.createElement("footer", { className: "pb-10 pt-2 text-center text-xs text-gray-400" }, "DJ Journey Tracker v8 • Local only • Tip: Export before clearing browser storage.")
-        )
+      useEffect(() => { if (students.length && !activeStudentId) setActiveStudentId(students[0].id); }, [students.length]);
+      return React.createElement("div", { className: "space-y-4 p-4", style: { maxWidth: "72rem", margin: "0 auto" } },
+        React.createElement(Header, { activeWeek, setActiveWeek, totalWeeks: 36 }),
+        React.createElement(StudentManager, { students, setStudents, setActiveStudentId }),
+        activeStudent
+          ? React.createElement(StudentPanel, { student: activeStudent, setStudents, week: activeWeek })
+          : React.createElement("div", { className: "card", style: { textAlign: "center", color: "#6b7280" } }, "Add a student to get started."),
+        React.createElement(DataMenu, { data: store, setData: setStore }),
+        React.createElement("footer", { className: "pb-10 pt-2", style: { textAlign: "center", fontSize: ".75rem", color: "#9ca3af" } }, "DJ Journey Tracker v8 • Local only • Tip: Export before clearing browser storage.")
       );
     }
 
     const root = ReactDOM.createRoot(document.getElementById("root"));
     root.render(React.createElement(App));
-  })();
+  });
   </script>
 </body>
 </html>
