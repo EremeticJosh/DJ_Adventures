@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DJ Journey Tracker v13 — Leaderboard</title>
+<title>DJ Journey Tracker v15 — Progress Bars + Weekly Leaderboards</title>
 <style>
   :root{
     --bg:#f6f7fb;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#111827;
@@ -11,8 +11,10 @@
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial}
-  .container{max-width:1100px;margin:0 auto;padding:16px}
-  h1{font-size:28px;margin:0 0 4px} h2{margin:0 0 8px} h3{margin:0}
+  .container{max-width:1140px;margin:0 auto;padding:16px}
+  h1{font-size:28px;margin:0 0 4px}
+  h2{margin:0 0 8px}
+  h3{margin:0}
   .muted{color:var(--muted)}
   .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
@@ -22,7 +24,7 @@
   input,textarea,select{border:1px solid var(--line);border-radius:12px;padding:8px 10px}
   textarea{width:100%;height:120px}
   .grid{display:grid;gap:12px}
-  @media(min-width:900px){.grid-3{grid-template-columns:1fr 2fr}}
+  @media(min-width:980px){.grid-3{grid-template-columns:1.1fr 1.4fr 1.2fr}}
   .pill{border:1px solid var(--line);border-radius:999px;padding:2px 10px;display:inline-block;font-size:12px}
   .list{display:grid;gap:8px}
   .task{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff}
@@ -31,20 +33,21 @@
   .table{width:100%;border-collapse:collapse}
   .table th,.table td{border-bottom:1px solid var(--line);padding:6px;text-align:left;font-size:14px}
   .tile{border:1px solid var(--line);border-radius:12px;padding:10px 14px;text-align:center}
-  .rank{font-weight:700}
-  .gold{background:#fff7d6}
-  .silver{background:#f1f5f9}
-  .bronze{background:#fef3c7}
+  .progress{height:14px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin:6px 0}
+  .progress-bar{height:100%;background:#111827;text-align:right;font-size:10px;color:#fff;padding-right:4px}
   .tabbar{display:flex;gap:8px;margin-bottom:8px}
   .tab{padding:6px 10px;border:1px solid var(--line);border-radius:999px;cursor:pointer}
   .tab.active{background:#111;color:#fff}
+  .gold{background:#fff7d6}
+  .silver{background:#f1f5f9}
+  .bronze{background:#fef3c7}
 </style>
 </head>
 <body>
   <div class="container">
     <div class="row" style="justify-content:space-between">
       <div>
-        <h1>DJ Journey Tracker v13</h1>
+        <h1>DJ Journey Tracker v15</h1>
         <div class="muted" style="font-size:13px">XP = skill progression • Crowd Control (CC) = shop currency • Attendance grants +10 XP/+10 CC • Data saved locally</div>
       </div>
       <div class="row">
@@ -68,10 +71,12 @@
         <div class="tabbar">
           <div class="tab active" id="tab-xp">Top by XP</div>
           <div class="tab" id="tab-cc">Top by CC</div>
+          <div class="tab" id="tab-weekly-xp">Top by Weekly XP</div>
+          <div class="tab" id="tab-weekly-cc">Top by Weekly CC</div>
         </div>
       </div>
       <div id="leaderboard"></div>
-      <div class="muted" style="font-size:12px;margin-top:6px">Tip: Encourage effort & consistency. Consider small weekly prizes for top CC earners.</div>
+      <div class="muted" style="font-size:12px;margin-top:6px">Weekly tabs rank gains for the selected Week (top-right). Purchases don’t reduce weekly CC gains.</div>
     </div>
 
     <div id="panel"></div>
@@ -88,12 +93,12 @@
       <textarea id="io" placeholder="Paste JSON here to import, or click Export first."></textarea>
     </div>
 
-    <div class="footer">DJ Journey Tracker v13 • Local only • Tip: Export before clearing browser storage.</div>
+    <div class="footer">DJ Journey Tracker v15 • Local only • Tip: Export before clearing browser storage.</div>
   </div>
 
 <script>
 (function(){
-  const STORAGE_KEY = 'dj_journey_tracker_v13_leaderboard';
+  const STORAGE_KEY = 'dj_journey_tracker_v15_progress_weekly';
   const $ = (sel, root=document) => root.querySelector(sel);
   const uid = () => Math.random().toString(36).slice(2,9);
   const today = () => new Date().toISOString().slice(0,10);
@@ -101,7 +106,7 @@
   const ATTENDANCE_REWARD_XP = 10;
   const ATTENDANCE_REWARD_CC = 10;
 
-  // ---------- Curriculum (same as v12) ----------
+  // ---------- Curriculum ----------
   const W = (w, unit, title, tasks, badge) => ({ w, unit, title, tasks: tasks.map((t,i)=>({ id: w+'-'+(i+1), ...t })), badge});
   const T = (title, xp, type='class') => ({ title, xp, type });
   const Challenge = (title, xp=30) => T('Challenge: '+title, xp, 'challenge');
@@ -191,51 +196,72 @@
   // ---------- State ----------
   let store = load() || { students: [] };
   let activeStudentId = (store.students[0] && store.students[0].id) || null;
-  let leaderboardMode = 'xp'; // 'xp' or 'cc'
+  let leaderboardMode = 'xp'; // 'xp' | 'cc' | 'weekly_xp' | 'weekly_cc'
 
   function load(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){ return null; } }
   function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); }catch(e){} }
+
+  // ---------- Helpers ----------
+  function ensureFields(s){
+    if (typeof s.crowdControl !== 'number') s.crowdControl = 0;
+    if (!s.weekly) s.weekly = {}; // per-week gains: { [week]: { xp: number, cc: number } }
+    if (!s.purchases) s.purchases = [];
+    if (!s.attendance) s.attendance = {};
+    if (!s.completed) s.completed = {};
+    if (!s.badges) s.badges = [];
+    if (typeof s.xp !== 'number') s.xp = 0;
+  }
+  function addWeekly(s, week, dxp, dcc){
+    const w = String(week);
+    s.weekly[w] = s.weekly[w] || { xp:0, cc:0 };
+    // add deltas; negative allowed (e.g., undo), but shop purchases don't call this
+    s.weekly[w].xp += dxp;
+    s.weekly[w].cc += dcc;
+    // Clamp to >=0 so weekly gains never go negative for the scoreboard
+    if(s.weekly[w].xp < 0) s.weekly[w].xp = 0;
+    if(s.weekly[w].cc < 0) s.weekly[w].cc = 0;
+  }
+  function levelOf(xp){ return 1 + Math.floor((xp||0)/100); }
+  function xpIntoLevel(xp){ return (xp||0) % 100; }
 
   // ---------- Leaderboard ----------
   function renderLeaderboard(){
     const box = document.getElementById('leaderboard');
     if(!store.students.length){ box.innerHTML = '<div class="muted">Add students to populate the leaderboard.</div>'; return; }
-    // ensure CC exists in all
-    store.students.forEach(s => { if(typeof s.crowdControl!=='number') s.crowdControl = 0; });
+    const week = parseInt(document.getElementById('week').value)||1;
+    const mode = leaderboardMode;
+    const arr = store.students.map(s => {
+      ensureFields(s);
+      const wk = s.weekly[String(week)] || { xp:0, cc:0 };
+      return { name:s.name||'—', xp:s.xp||0, cc:s.crowdControl||0, badges:(s.badges||[]).length, w_xp:wk.xp||0, w_cc:wk.cc||0 };
+    });
+    let sorted;
+    if(mode==='xp') sorted = arr.sort((a,b)=>b.xp-a.xp);
+    else if(mode==='cc') sorted = arr.sort((a,b)=>b.cc-a.cc);
+    else if(mode==='weekly_xp') sorted = arr.sort((a,b)=>b.w_xp-a.w_xp);
+    else sorted = arr.sort((a,b)=>b.w_cc-a.w_cc);
 
-    const sorted = [...store.students].sort((a,b)=>{
-      return leaderboardMode==='xp' ? (b.xp||0)-(a.xp||0) : (b.crowdControl||0)-(a.crowdControl||0);
-    }).slice(0,10);
-
-    let headerLeft = leaderboardMode==='xp' ? 'XP' : 'Crowd Control';
-    box.innerHTML = '';
     const table = document.createElement('table'); table.className='table';
-    const thead = document.createElement('thead');
-    thead.innerHTML = `<tr><th style="width:60px">Rank</th><th>Name</th><th style="width:140px;text-align:right">${headerLeft}</th><th style="width:120px;text-align:right">Badges</th></tr>`;
-    table.append(thead);
+    const label = (mode==='xp')? 'XP' : (mode==='cc')? 'Crowd Control' : (mode==='weekly_xp')? 'Weekly XP' : 'Weekly CC';
+    table.innerHTML = `<thead><tr><th style="width:60px">Rank</th><th>Name</th><th style="width:140px;text-align:right">${label}</th><th style="width:120px;text-align:right">Badges</th></tr></thead>`;
     const tbody = document.createElement('tbody');
-
-    sorted.forEach((s, i) => {
+    sorted.slice(0,10).forEach((r,i)=>{
       const tr = document.createElement('tr');
-      const rank = i+1;
-      if(rank===1) tr.classList.add('gold');
-      if(rank===2) tr.classList.add('silver');
-      if(rank===3) tr.classList.add('bronze');
-      const score = leaderboardMode==='xp' ? (s.xp||0) : (s.crowdControl||0);
-      const badges = (s.badges||[]).length;
-      tr.innerHTML = `<td class="rank">#${rank}</td><td>${s.name||'—'}</td><td style="text-align:right">${score}</td><td style="text-align:right">${badges}</td>`;
+      if(i===0) tr.classList.add('gold'); if(i===1) tr.classList.add('silver'); if(i===2) tr.classList.add('bronze');
+      const value = (mode==='xp')? r.xp : (mode==='cc')? r.cc : (mode==='weekly_xp')? r.w_xp : r.w_cc;
+      tr.innerHTML = `<td>#${i+1}</td><td>${r.name}</td><td style="text-align:right">${value}</td><td style="text-align:right">${r.badges}</td>`;
       tbody.append(tr);
     });
-
+    box.innerHTML='';
     table.append(tbody);
     box.append(table);
   }
 
-  // ---------- Rendering ----------
+  // ---------- UI: Students list ----------
   function renderStudents(){
     const list = document.getElementById('studentsList'); list.innerHTML='';
     store.students.forEach(s => {
-      if (typeof s.crowdControl !== 'number') s.crowdControl = 0;
+      ensureFields(s);
       const card = document.createElement('div'); card.className='card';
       const name = document.createElement('input'); name.value=s.name; name.oninput=()=>{ s.name=name.value; save(); renderPanel(); renderLeaderboard(); };
       name.style.width='100%';
@@ -248,19 +274,19 @@
     });
   }
 
+  // ---------- Panel (selected student) ----------
   function renderPanel(){
     const wrap = document.getElementById('panel'); wrap.innerHTML='';
     const s = store.students.find(x=>x.id===activeStudentId);
     if(!s){ wrap.innerHTML = '<div class="card muted" style="text-align:center">Add a student to get started.</div>'; return; }
-
-    if (typeof s.crowdControl !== 'number') s.crowdControl = 0;
+    ensureFields(s);
 
     const week = parseInt(document.getElementById('week').value)||1;
-
     const top = document.createElement('div'); top.className='grid grid-3';
 
-    // Left summary
+    // Left summary with progress bar
     const left = document.createElement('div'); left.className='card';
+    const lvl = levelOf(s.xp); const xpL = xpIntoLevel(s.xp);
     left.innerHTML = `
       <div class="muted" style="text-transform:uppercase;font-size:12px;letter-spacing:.05em">Student</div>
       <div style="font-size:22px;font-weight:700;margin-bottom:8px">${s.name}</div>
@@ -271,19 +297,25 @@
         </div>
         <div class="tile">
           <div class="muted" style="font-size:12px">Level</div>
-          <div style="font-size:18px;font-weight:600">${1+Math.floor((s.xp||0)/100)}</div>
+          <div style="font-size:18px;font-weight:600">${lvl}</div>
         </div>
         <div class="tile">
           <div class="muted" style="font-size:12px">Crowd Control</div>
           <div style="font-size:18px;font-weight:600">${s.crowdControl||0} CC</div>
         </div>
       </div>
+      <div class="muted" style="font-size:12px;margin-top:6px">Next level</div>
+      <div class="progress"><div class="progress-bar" style="width:${xpL}%">${xpL}/100</div></div>
     `;
 
-    // XP buttons
+    // Manual XP buttons (affect weekly XP for the selected week)
     const xpRow = document.createElement('div'); xpRow.className='row';
     [10,20,30,50,100].forEach(n=>{
-      const b=document.createElement('button'); b.className='btn'; b.textContent='+'+n+' XP'; b.title='Manual XP grant'; b.onclick=()=>{ s.xp=(s.xp||0)+n; save(); renderStudents(); renderPanel(); renderLeaderboard(); };
+      const b=document.createElement('button'); b.className='btn'; b.textContent='+'+n+' XP'; b.title='Manual XP grant'; b.onclick=()=>{
+        s.xp=(s.xp||0)+n;
+        addWeekly(s, week, n, 0);
+        save(); renderStudents(); renderPanel(); renderLeaderboard();
+      };
       xpRow.append(b);
     });
     left.append(xpRow);
@@ -302,7 +334,7 @@
     const ta=document.createElement('textarea'); ta.value=s.notes||''; ta.oninput=()=>{ s.notes=ta.value; save(); }; notes.append(ta);
     left.append(notes);
 
-    // Attendance
+    // Attendance (affects weekly XP/CC)
     const att = document.createElement('div'); att.className='card'; att.style.marginTop='12px';
     const rec = (s.attendance&&s.attendance[week])||{}; const days=['Mon','Tue','Wed','Thu'];
     const attRow=document.createElement('div'); attRow.className='row';
@@ -316,9 +348,11 @@
         if(!wasPresent){
           s.xp = Math.max(0, (s.xp||0) + ATTENDANCE_REWARD_XP);
           s.crowdControl = Math.max(0, (s.crowdControl||0) + ATTENDANCE_REWARD_CC);
+          addWeekly(s, week, ATTENDANCE_REWARD_XP, ATTENDANCE_REWARD_CC);
         }else{
           s.xp = Math.max(0, (s.xp||0) - ATTENDANCE_REWARD_XP);
           s.crowdControl = Math.max(0, (s.crowdControl||0) - ATTENDANCE_REWARD_CC);
+          addWeekly(s, week, -ATTENDANCE_REWARD_XP, -ATTENDANCE_REWARD_CC);
         }
         save(); renderStudents(); renderPanel(); renderLeaderboard();
       };
@@ -327,7 +361,7 @@
     const mark=document.createElement('div'); mark.className='muted'; mark.style.fontSize='12px'; mark.style.marginTop='6px'; mark.textContent=`Marked: ${days.filter(d=>rec[d]).length}/4`;
     att.append(attRow, mark);
 
-    // Reward shop — uses CC
+    // Reward shop — uses CC (purchases don't affect weekly gains)
     const shop = document.createElement('div'); shop.className='card'; shop.style.marginTop='12px';
     shop.innerHTML = '<div style="font-size:18px;font-weight:600;margin-bottom:6px">Reward Shop (uses Crowd Control)</div>';
     const SHOP=[
@@ -360,7 +394,7 @@
       hist.append(tbl); shop.append(hist);
     }
 
-    // Right: Week tasks
+    // Right: Week tasks (affect weekly gains)
     const right = document.createElement('div'); right.className='grid';
     const data = CURRICULUM.find(x=>x.w===week);
     const tasksCard=document.createElement('div'); tasksCard.className='card';
@@ -383,9 +417,11 @@
         if(!already){
           s.xp = Math.max(0,(s.xp||0) + delta);
           s.crowdControl = Math.max(0,(s.crowdControl||0) + delta);
+          addWeekly(s, week, delta, delta);
         } else {
           s.xp = Math.max(0,(s.xp||0) - delta);
           s.crowdControl = Math.max(0,(s.crowdControl||0) - delta);
+          addWeekly(s, week, -delta, -delta);
         }
         if(data.badge && t.title.toLowerCase().includes('challenge') && !already){
           const badges = new Set(s.badges||[]); badges.add(data.badge.name); s.badges=[...badges];
@@ -396,29 +432,28 @@
     });
     tasksCard.append(list);
 
+    // Assemble
     top.append(left, right);
     right.append(tasksCard);
-
     const sideStack = document.createElement('div'); sideStack.append(att, shop);
     top.insertBefore(sideStack, right);
-
     wrap.append(top);
   }
 
   // ---------- Events ----------
   document.getElementById('addBtn').onclick = () => {
     const name = document.getElementById('newName').value.trim(); if(!name) return;
-    const s = { id: uid(), name, xp:0, crowdControl:0, badges:[], notes:'', attendance:{}, completed:{}, purchases:[] };
+    const s = { id: uid(), name, xp:0, crowdControl:0, badges:[], notes:'', attendance:{}, completed:{}, purchases:[], weekly:{} };
     store.students.push(s); activeStudentId = s.id; save(); document.getElementById('newName').value=''; renderStudents(); renderPanel(); renderLeaderboard();
   };
-  document.getElementById('week').oninput = () => { renderPanel(); };
+  document.getElementById('week').oninput = () => { renderPanel(); renderLeaderboard(); };
   document.getElementById('exportBtn').onclick = () => { document.getElementById('io').value = JSON.stringify(store, null, 2); };
   document.getElementById('importBtn').onclick = () => {
     try{
       const obj = JSON.parse(document.getElementById('io').value);
       if (obj && obj.students) {
         obj.students = obj.students.map(s => {
-          if (typeof s.crowdControl !== 'number') s.crowdControl = 0;
+          ensureFields(s);
           return s;
         });
       }
@@ -429,19 +464,18 @@
   };
   document.getElementById('resetBtn').onclick = () => { if(confirm('Reset all data? This cannot be undone.')){ store={students:[]}; activeStudentId=null; save(); renderStudents(); renderPanel(); renderLeaderboard(); } };
 
-  // Tab handlers
-  document.getElementById('tab-xp').onclick = () => {
-    leaderboardMode = 'xp';
-    document.getElementById('tab-xp').classList.add('active');
-    document.getElementById('tab-cc').classList.remove('active');
-    renderLeaderboard();
-  };
-  document.getElementById('tab-cc').onclick = () => {
-    leaderboardMode = 'cc';
-    document.getElementById('tab-cc').classList.add('active');
-    document.getElementById('tab-xp').classList.remove('active');
-    renderLeaderboard();
-  };
+  // ---------- Tabs ----------
+  function setActive(){
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    if(leaderboardMode==='xp') document.getElementById('tab-xp').classList.add('active');
+    if(leaderboardMode==='cc') document.getElementById('tab-cc').classList.add('active');
+    if(leaderboardMode==='weekly_xp') document.getElementById('tab-weekly-xp').classList.add('active');
+    if(leaderboardMode==='weekly_cc') document.getElementById('tab-weekly-cc').classList.add('active');
+  }
+  document.getElementById('tab-xp').onclick = () => { leaderboardMode='xp'; setActive(); renderLeaderboard(); };
+  document.getElementById('tab-cc').onclick = () => { leaderboardMode='cc'; setActive(); renderLeaderboard(); };
+  document.getElementById('tab-weekly-xp').onclick = () => { leaderboardMode='weekly_xp'; setActive(); renderLeaderboard(); };
+  document.getElementById('tab-weekly-cc').onclick = () => { leaderboardMode='weekly_cc'; setActive(); renderLeaderboard(); };
 
   // ---------- Init ----------
   renderStudents();
