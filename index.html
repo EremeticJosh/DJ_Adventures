@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DJ Journey Tracker v11 — XP + Crowd Control</title>
+<title>DJ Journey Tracker v12 — Attendance Rewards</title>
 <style>
   :root{
     --bg:#f6f7fb;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#111827;
@@ -37,8 +37,8 @@
   <div class="container">
     <div class="row" style="justify-content:space-between">
       <div>
-        <h1>DJ Journey Tracker v11</h1>
-        <div class="muted" style="font-size:13px">XP = skill progression • Crowd Control (CC) = shop currency • Data saved locally</div>
+        <h1>DJ Journey Tracker v12</h1>
+        <div class="muted" style="font-size:13px">XP = skill progression • Crowd Control (CC) = shop currency • Attendance grants +10 XP/+10 CC • Data saved locally</div>
       </div>
       <div class="row">
         <label class="muted" for="week">Week</label>
@@ -69,17 +69,19 @@
       <textarea id="io" placeholder="Paste JSON here to import, or click Export first."></textarea>
     </div>
 
-    <div class="footer">DJ Journey Tracker v11 • Local only • Tip: Export before clearing browser storage.</div>
+    <div class="footer">DJ Journey Tracker v12 • Local only • Tip: Export before clearing browser storage.</div>
   </div>
 
 <script>
 (function(){
-  const STORAGE_KEY = 'dj_journey_tracker_v11_crowdcontrol';
+  const STORAGE_KEY = 'dj_journey_tracker_v12_attendance_reward';
   const $ = (sel, root=document) => root.querySelector(sel);
   const uid = () => Math.random().toString(36).slice(2,9);
   const today = () => new Date().toISOString().slice(0,10);
 
-  // ---------- Curriculum ----------
+  const ATTENDANCE_REWARD_XP = 10;
+  const ATTENDANCE_REWARD_CC = 10;
+
   const W = (w, unit, title, tasks, badge) => ({ w, unit, title, tasks: tasks.map((t,i)=>({ id: w+'-'+(i+1), ...t })), badge});
   const T = (title, xp, type='class') => ({ title, xp, type });
   const Challenge = (title, xp=30) => T('Challenge: '+title, xp, 'challenge');
@@ -166,19 +168,16 @@
     ...generateTemplateWeeks(35,36,'Unit 8 — Turntablist Tower','Scratching & Battles',true,'Scratch Badge'),
   ];
 
-  // ---------- State ----------
   let store = load() || { students: [] };
   let activeStudentId = (store.students[0] && store.students[0].id) || null;
 
   function load(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){ return null; } }
   function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); }catch(e){} }
 
-  // ---------- Rendering ----------
   function renderStudents(){
     const list = document.getElementById('studentsList'); list.innerHTML='';
     store.students.forEach(s => {
-      // ensure crowdControl field exists (migrate old data if present)
-      if (typeof s.crowdControl !== 'number') s.crowdControl = (typeof s.crowdPoints === 'number') ? s.crowdPoints : 0;
+      if (typeof s.crowdControl !== 'number') s.crowdControl = 0;
       const card = document.createElement('div'); card.className='card';
       const name = document.createElement('input'); name.value=s.name; name.oninput=()=>{ s.name=name.value; save(); renderPanel(); };
       name.style.width='100%';
@@ -195,36 +194,22 @@
     const wrap = document.getElementById('panel'); wrap.innerHTML='';
     const s = store.students.find(x=>x.id===activeStudentId);
     if(!s){ wrap.innerHTML = '<div class="card muted" style="text-align:center">Add a student to get started.</div>'; return; }
-
-    // ensure CC exists
     if (typeof s.crowdControl !== 'number') s.crowdControl = 0;
-
     const week = parseInt(document.getElementById('week').value)||1;
 
     const top = document.createElement('div'); top.className='grid grid-3';
 
-    // Left summary
     const left = document.createElement('div'); left.className='card';
     left.innerHTML = `
       <div class="muted" style="text-transform:uppercase;font-size:12px;letter-spacing:.05em">Student</div>
       <div style="font-size:22px;font-weight:700;margin-bottom:8px">${s.name}</div>
       <div class="row">
-        <div class="tile">
-          <div class="muted" style="font-size:12px">XP</div>
-          <div style="font-size:18px;font-weight:600">${s.xp||0}</div>
-        </div>
-        <div class="tile">
-          <div class="muted" style="font-size:12px">Level</div>
-          <div style="font-size:18px;font-weight:600">${1+Math.floor((s.xp||0)/100)}</div>
-        </div>
-        <div class="tile">
-          <div class="muted" style="font-size:12px">Crowd Control</div>
-          <div style="font-size:18px;font-weight:600">${s.crowdControl||0} CC</div>
-        </div>
+        <div class="tile"><div class="muted" style="font-size:12px">XP</div><div style="font-size:18px;font-weight:600">${s.xp||0}</div></div>
+        <div class="tile"><div class="muted" style="font-size:12px">Level</div><div style="font-size:18px;font-weight:600">${1+Math.floor((s.xp||0)/100)}</div></div>
+        <div class="tile"><div class="muted" style="font-size:12px">Crowd Control</div><div style="font-size:18px;font-weight:600">${s.crowdControl||0} CC</div></div>
       </div>
     `;
 
-    // XP buttons
     const xpRow = document.createElement('div'); xpRow.className='row';
     [10,20,30,50,100].forEach(n=>{
       const b=document.createElement('button'); b.className='btn'; b.textContent='+'+n+' XP'; b.title='Manual XP grant'; b.onclick=()=>{ s.xp=(s.xp||0)+n; save(); renderStudents(); renderPanel(); };
@@ -232,7 +217,6 @@
     });
     left.append(xpRow);
 
-    // Badges
     const badgeBox = document.createElement('div'); badgeBox.style.marginTop='12px';
     badgeBox.innerHTML = '<div class="muted" style="font-size:14px;margin-bottom:4px">Badges</div>';
     const rack = document.createElement('div'); (s.badges||[]).forEach(b=>{ const tag=document.createElement('div'); tag.className='badge'; tag.textContent=b; rack.append(tag); });
@@ -240,22 +224,35 @@
     badgeBox.append(rack);
     left.append(badgeBox);
 
-    // Notes
     const notes = document.createElement('div'); notes.style.marginTop='12px';
     notes.innerHTML = '<label class="muted" style="font-size:14px">Notes</label>';
     const ta=document.createElement('textarea'); ta.value=s.notes||''; ta.oninput=()=>{ s.notes=ta.value; save(); }; notes.append(ta);
     left.append(notes);
 
-    // Attendance
     const att = document.createElement('div'); att.className='card'; att.style.marginTop='12px';
     const rec = (s.attendance&&s.attendance[week])||{}; const days=['Mon','Tue','Wed','Thu'];
     const attRow=document.createElement('div'); attRow.className='row';
-    att.innerHTML = `<div class="muted" style="font-size:14px;margin-bottom:6px">Attendance (Week ${week})</div>`;
-    days.forEach(d=>{ const btn=document.createElement('button'); btn.className='btn'; if(rec[d]) btn.style.background='#d1fae5'; btn.textContent=d; btn.onclick=()=>{ const newRec={...rec}; newRec[d]=!rec[d]; s.attendance = {...(s.attendance||{}), [week]: newRec}; save(); renderPanel(); }; attRow.append(btn); });
+    att.innerHTML = `<div class="muted" style="font-size:14px;margin-bottom:6px">Attendance (Week ${week}) — each day grants +${ATTENDANCE_REWARD_XP} XP/+${ATTENDANCE_REWARD_CC} CC</div>`;
+    days.forEach(d=>{
+      const btn=document.createElement('button'); btn.className='btn'; if(rec[d]) btn.style.background='#d1fae5'; btn.textContent=d;
+      btn.onclick=()=>{
+        const wasPresent = !!rec[d];
+        const newRec={...rec}; newRec[d]=!wasPresent;
+        s.attendance = {...(s.attendance||{}), [week]: newRec};
+        if(!wasPresent){
+          s.xp = Math.max(0, (s.xp||0) + ATTENDANCE_REWARD_XP);
+          s.crowdControl = Math.max(0, (s.crowdControl||0) + ATTENDANCE_REWARD_CC);
+        }else{
+          s.xp = Math.max(0, (s.xp||0) - ATTENDANCE_REWARD_XP);
+          s.crowdControl = Math.max(0, (s.crowdControl||0) - ATTENDANCE_REWARD_CC);
+        }
+        save(); renderStudents(); renderPanel();
+      };
+      attRow.append(btn);
+    });
     const mark=document.createElement('div'); mark.className='muted'; mark.style.fontSize='12px'; mark.style.marginTop='6px'; mark.textContent=`Marked: ${days.filter(d=>rec[d]).length}/4`;
     att.append(attRow, mark);
 
-    // Reward shop — uses Crowd Control (CC)
     const shop = document.createElement('div'); shop.className='card'; shop.style.marginTop='12px';
     shop.innerHTML = '<div style="font-size:18px;font-weight:600;margin-bottom:6px">Reward Shop (uses Crowd Control)</div>';
     const SHOP=[
@@ -288,7 +285,6 @@
       hist.append(tbl); shop.append(hist);
     }
 
-    // Right: Week tasks
     const right = document.createElement('div'); right.className='grid';
     const data = CURRICULUM.find(x=>x.w===week);
     const tasksCard=document.createElement('div'); tasksCard.className='card';
@@ -324,18 +320,15 @@
     });
     tasksCard.append(list);
 
-    // Append columns
     top.append(left, right);
     right.append(tasksCard);
 
-    // Attendance + Shop under the left column
     const sideStack = document.createElement('div'); sideStack.append(att, shop);
     top.insertBefore(sideStack, right);
 
     wrap.append(top);
   }
 
-  // ---------- Events ----------
   document.getElementById('addBtn').onclick = () => {
     const name = document.getElementById('newName').value.trim(); if(!name) return;
     const s = { id: uid(), name, xp:0, crowdControl:0, badges:[], notes:'', attendance:{}, completed:{}, purchases:[] };
@@ -346,12 +339,9 @@
   document.getElementById('importBtn').onclick = () => {
     try{
       const obj = JSON.parse(document.getElementById('io').value);
-      // migrate CP -> CC if present
       if (obj && obj.students) {
         obj.students = obj.students.map(s => {
-          if (typeof s.crowdControl !== 'number') {
-            s.crowdControl = (typeof s.crowdPoints === 'number') ? s.crowdPoints : 0;
-          }
+          if (typeof s.crowdControl !== 'number') s.crowdControl = 0;
           return s;
         });
       }
@@ -362,7 +352,6 @@
   };
   document.getElementById('resetBtn').onclick = () => { if(confirm('Reset all data? This cannot be undone.')){ store={students:[]}; activeStudentId=null; save(); renderStudents(); renderPanel(); } };
 
-  // ---------- Init ----------
   renderStudents();
   renderPanel();
 })();
